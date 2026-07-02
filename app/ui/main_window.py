@@ -124,6 +124,8 @@ class MainWindow(QMainWindow):
         self.repost_tab.source_edit.setText(self.cfg.get("SOURCE_CHANNEL"))
         self.repost_tab.target_edit.setText(self.cfg.get("TARGET_CHANNEL"))
         self.cleaner_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
+        self.cleaner_tab.keep_list.clear()
+        self.cleaner_tab._load_keep_ids()
 
     # -------------------------------------------------------------- close
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)

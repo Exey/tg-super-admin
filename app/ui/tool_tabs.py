@@ -1,10 +1,14 @@
 """Concrete tool tabs."""
 from __future__ import annotations
 
+import re
+
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QRadioButton,
-    QSpinBox, QVBoxLayout, QWidget,
+    QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMessageBox, QPushButton, QRadioButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from ..tools.backup import run_backup
@@ -15,6 +19,33 @@ from ..tools.restore import run_restore
 from .base_tab import ToolTab
 
 MAX_ID = 2_147_483_647
+
+
+def parse_message_id(text: str) -> int | None:
+    """Accept a bare message ID or any t.me link (last numeric path part)."""
+    text = text.strip()
+    if not text:
+        return None
+    if text.isdigit():
+        return int(text)
+    m = re.search(r"t\.me/([^\s?#]+)", text)
+    if not m:
+        return None
+    parts = [seg for seg in m.group(1).split("/") if seg]
+    for seg in reversed(parts):  # last numeric segment = message ID
+        if seg.isdigit():
+            return int(seg)
+    return None
+
+
+def build_post_link(channel_text: str, msg_id: int) -> str:
+    """Build a t.me link from whatever is in the channel field."""
+    v = channel_text.strip().lstrip("@")
+    if v.startswith("-100") and v[4:].isdigit():
+        return f"https://t.me/c/{v[4:]}/{msg_id}"
+    if v.lstrip("-").isdigit():
+        return f"https://t.me/c/{v.lstrip('-')}/{msg_id}"
+    return f"https://t.me/{v}/{msg_id}" if v else f"https://t.me/c/0/{msg_id}"
 
 
 def _folder_row(parent, line_edit: QLineEdit, browse_text: str) -> QWidget:
@@ -66,6 +97,8 @@ class BackupTab(ToolTab):
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("backup_group"))
             return None
+        self.cfg.profile["CHANNEL_ID"] = self.group_edit.text().strip()
+        self.cfg.save()
         return {
             "group": self.group_edit.text().strip(),
             "mode": self.mode_combo.currentIndex() + 1,
@@ -135,6 +168,10 @@ class RestoreTab(ToolTab):
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("restore_chat"))
             return None
+        self.cfg.profile["CHAT_ID"] = self.chat_edit.text().strip()
+        self.cfg.profile["TOPIC_ID"] = (
+            str(self.topic_spin.value()) if self.topic_spin.value() else "")
+        self.cfg.save()
         return {
             "backup_folder": self.folder_edit.text().strip(),
             "chat": self.chat_edit.text().strip(),
@@ -215,6 +252,9 @@ class RepostTab(ToolTab):
                 QMessageBox.information(self, self.tr_("confirm_title"),
                                         self.tr_("confirm_wrong"))
                 return None
+        self.cfg.profile["SOURCE_CHANNEL"] = self.source_edit.text().strip()
+        self.cfg.profile["TARGET_CHANNEL"] = self.target_edit.text().strip()
+        self.cfg.save()
         return {
             "source": self.source_edit.text().strip(),
             "target": self.target_edit.text().strip(),
@@ -245,6 +285,7 @@ class CleanerTab(ToolTab):
         self.form.addRow("", warn)
 
         self.channel_edit = QLineEdit(self.cfg.get("CHANNEL_ID"))
+        self.channel_edit.textChanged.connect(self._refresh_keep_links)
         self.form.addRow(self.tr_("cleaner_channel"), self.channel_edit)
 
         self.batch_spin = QSpinBox()
@@ -252,6 +293,106 @@ class CleanerTab(ToolTab):
         self.batch_spin.setValue(100)
         self.form.addRow(self.tr_("batch_size"), self.batch_spin)
 
+        # ------------------------------------------------------ keep list
+        keep_box = QWidget()
+        keep_lay = QVBoxLayout(keep_box)
+        keep_lay.setContentsMargins(0, 0, 0, 0)
+
+        add_row = QHBoxLayout()
+        self.keep_input = QLineEdit()
+        self.keep_input.setPlaceholderText(self.tr_("keep_placeholder"))
+        self.keep_input.returnPressed.connect(self._add_keep)
+        add_row.addWidget(self.keep_input, stretch=1)
+        add_btn = QPushButton(self.tr_("keep_add"))
+        add_btn.clicked.connect(self._add_keep)
+        add_row.addWidget(add_btn)
+        keep_lay.addLayout(add_row)
+
+        self.keep_list = QListWidget()
+        self.keep_list.setMaximumHeight(120)
+        self.keep_list.itemDoubleClicked.connect(self._open_keep_item)
+        keep_lay.addWidget(self.keep_list)
+
+        btn_row = QHBoxLayout()
+        open_btn = QPushButton(self.tr_("keep_open"))
+        open_btn.clicked.connect(
+            lambda: self._open_keep_item(self.keep_list.currentItem()))
+        btn_row.addWidget(open_btn)
+        rm_btn = QPushButton(self.tr_("keep_remove"))
+        rm_btn.clicked.connect(self._remove_keep)
+        btn_row.addWidget(rm_btn)
+        btn_row.addStretch()
+        keep_lay.addLayout(btn_row)
+
+        hint = QLabel(self.tr_("keep_hint"))
+        hint.setStyleSheet("color: palette(mid);")
+        hint.setWordWrap(True)
+        keep_lay.addWidget(hint)
+
+        self.form.addRow(self.tr_("keep_ids"), keep_box)
+        self._load_keep_ids()
+
+    # ------------------------------------------------------ keep-list ops
+    def keep_ids(self) -> list[int]:
+        return [self.keep_list.item(i).data(Qt.ItemDataRole.UserRole)
+                for i in range(self.keep_list.count())]
+
+    def _load_keep_ids(self) -> None:
+        raw = self.cfg.get("CLEANER_KEEP_IDS")
+        for chunk in raw.split(","):
+            chunk = chunk.strip()
+            if chunk.isdigit():
+                self._append_item(int(chunk))
+        self._refresh_keep_links()
+
+    def _persist_keep_ids(self) -> None:
+        self.cfg.profile["CLEANER_KEEP_IDS"] = ",".join(
+            str(i) for i in self.keep_ids())
+        self.cfg.save()
+
+    def _append_item(self, msg_id: int) -> None:
+        item = QListWidgetItem()
+        item.setData(Qt.ItemDataRole.UserRole, msg_id)
+        self.keep_list.addItem(item)
+
+    def _refresh_keep_links(self) -> None:
+        channel = self.channel_edit.text()
+        for i in range(self.keep_list.count()):
+            item = self.keep_list.item(i)
+            msg_id = item.data(Qt.ItemDataRole.UserRole)
+            link = build_post_link(channel, msg_id)
+            item.setText(f"#{msg_id}  —  {link}")
+            item.setToolTip(link)
+
+    def _add_keep(self) -> None:
+        msg_id = parse_message_id(self.keep_input.text())
+        if msg_id is None:
+            QMessageBox.warning(self, self.tr_("app_title"),
+                                self.tr_("keep_invalid"))
+            return
+        if msg_id in self.keep_ids():
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("keep_duplicate"))
+            return
+        self._append_item(msg_id)
+        self._refresh_keep_links()
+        self._persist_keep_ids()
+        self.keep_input.clear()
+
+    def _remove_keep(self) -> None:
+        row = self.keep_list.currentRow()
+        if row >= 0:
+            self.keep_list.takeItem(row)
+            self._persist_keep_ids()
+
+    def _open_keep_item(self, item) -> None:
+        if item is None:
+            return
+        msg_id = item.data(Qt.ItemDataRole.UserRole)
+        QDesktopServices.openUrl(
+            QUrl(build_post_link(self.channel_edit.text(), msg_id)))
+
+    # -------------------------------------------------------------- run
     def collect_params(self) -> dict | None:
         if not self.channel_edit.text().strip():
             QMessageBox.warning(self, self.tr_("app_title"),
@@ -264,9 +405,12 @@ class CleanerTab(ToolTab):
             QMessageBox.information(self, self.tr_("confirm_title"),
                                     self.tr_("confirm_wrong"))
             return None
+        self.cfg.profile["CHANNEL_ID"] = self.channel_edit.text().strip()
+        self._persist_keep_ids()
         return {
             "channel": self.channel_edit.text().strip(),
             "batch_size": self.batch_spin.value(),
+            "keep_ids": self.keep_ids(),
         }
 
     def tool_func(self):

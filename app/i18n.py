@@ -107,8 +107,19 @@ EN = {
     "start_from_id": "Start after message ID (0 = resume from progress)",
     # cleaner tab
     "cleaner_help": "Deletes ALL messages in a channel/group where you have "
-                    "“Delete messages” admin right.",
+                    "“Delete messages” admin right — except the posts you add "
+                    "to the keep list below. If a kept post is part of an "
+                    "album (2–10 media), the whole album is kept.",
     "cleaner_channel": "Channel / group ID or @username",
+    "keep_ids": "Keep these posts (skip deletion)",
+    "keep_placeholder": "Message ID or t.me link (e.g. 133737 or https://t.me/c/2805046984/133737)",
+    "keep_add": "➕ Add",
+    "keep_open": "🔗 Open",
+    "keep_remove": "🗑 Remove",
+    "keep_hint": "Double-click a row (or press Open) to view the post in "
+                 "Telegram and verify it's the right one.",
+    "keep_invalid": "Could not parse a message ID from that input.",
+    "keep_duplicate": "This message ID is already in the list.",
     "batch_size": "Batch size",
     "cleaner_warning": "⚠️ THIS DELETES EVERY MESSAGE IN THE CHANNEL. IRREVERSIBLE.",
     "confirm_title": "Confirm deletion",
@@ -214,8 +225,19 @@ RU = {
     "delete_original_note": "Удаление необратимо. Сначала проверьте на тестовом канале!",
     "start_from_id": "Начать после сообщения с ID (0 = продолжить по прогрессу)",
     "cleaner_help": "Удаляет ВСЕ сообщения в канале/группе, где у вас есть право "
-                    "«Удаление сообщений».",
+                    "«Удаление сообщений» — кроме постов из списка исключений "
+                    "ниже. Если сохранённый пост — часть альбома (2–10 медиа), "
+                    "альбом сохраняется целиком.",
     "cleaner_channel": "ID канала/группы или @username",
+    "keep_ids": "Сохранить эти посты (не удалять)",
+    "keep_placeholder": "ID сообщения или ссылка t.me (напр. 133737 или https://t.me/c/2805046984/133737)",
+    "keep_add": "➕ Добавить",
+    "keep_open": "🔗 Открыть",
+    "keep_remove": "🗑 Убрать",
+    "keep_hint": "Двойной клик по строке (или «Открыть») — откроет пост в "
+                 "Telegram, чтобы проверить, что он тот самый.",
+    "keep_invalid": "Не удалось распознать ID сообщения из введённого текста.",
+    "keep_duplicate": "Такой ID уже есть в списке.",
     "batch_size": "Размер пачки",
     "cleaner_warning": "⚠️ УДАЛЯЕТ ВСЕ СООБЩЕНИЯ В КАНАЛЕ. НЕОБРАТИМО.",
     "confirm_title": "Подтверждение удаления",

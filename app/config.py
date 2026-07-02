@@ -8,17 +8,21 @@ from pathlib import Path
 
 APP_NAME = "TgAdminTools"
 
-# Every field a profile stores. Order matters (used to render the form).
+# Every field a profile stores (also drives .env import/export).
 FIELDS = [
     "API_ID",
     "API_HASH",
     "PHONE_NUMBER",
-    "CHANNEL_ID",       # for groups (cleaner / backup default)
-    "CHAT_ID",          # restore target chat
-    "TOPIC_ID",         # restore target topic (forum thread)
-    "SOURCE_CHANNEL",   # repost source
-    "TARGET_CHANNEL",   # repost target
+    "CHANNEL_ID",         # for groups (cleaner / backup default)
+    "CHAT_ID",            # restore target chat
+    "TOPIC_ID",           # restore target topic (forum thread)
+    "SOURCE_CHANNEL",     # repost source
+    "TARGET_CHANNEL",     # repost target
+    "CLEANER_KEEP_IDS",   # comma-separated message IDs to skip when cleaning
 ]
+
+# Only these are shown on the Config tab; the rest live on their tool tabs.
+CONN_FIELDS = ["API_ID", "API_HASH", "PHONE_NUMBER"]
 
 EMPTY_PROFILE = {f: "" for f in FIELDS}
 

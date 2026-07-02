@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from ..config import FIELDS
+from ..config import CONN_FIELDS
 
 
 class ConfigTab(QWidget):
@@ -48,7 +48,7 @@ class ConfigTab(QWidget):
         # -------------------------------------------------------- fields
         form = QFormLayout()
         self.edits: dict[str, QLineEdit] = {}
-        for key in FIELDS:
+        for key in CONN_FIELDS:
             edit = QLineEdit()
             if key == "API_HASH":
                 edit.setEchoMode(QLineEdit.EchoMode.PasswordEchoOnEdit)
