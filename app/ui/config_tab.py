@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import CONN_FIELDS
+from .qr_login_dialog import QrLoginDialog
 
 
 class ConfigTab(QWidget):
@@ -67,6 +68,9 @@ class ConfigTab(QWidget):
         exp_btn = QPushButton(tr("export_env"))
         exp_btn.clicked.connect(self._export_env)
         brow.addWidget(exp_btn)
+        qr_btn = QPushButton(tr("qr_login_button"))
+        qr_btn.clicked.connect(self._qr_login)
+        brow.addWidget(qr_btn)
         brow.addStretch()
         root.addLayout(brow)
 
@@ -108,6 +112,14 @@ class ConfigTab(QWidget):
         self.cfg.save()
         self.status.setText(self.i18n.tr("saved"))
         self.profile_changed.emit()
+
+    def _qr_login(self) -> None:
+        self._store_fields()
+        if not (self.cfg.get("API_ID") and self.cfg.get("API_HASH")):
+            QMessageBox.warning(self, self.i18n.tr("app_title"),
+                                self.i18n.tr("missing_conn"))
+            return
+        QrLoginDialog(self.cfg, self.i18n, self).run_and_report()
 
     # ---------------------------------------------------------- profiles
     def _switch_profile(self, name: str) -> None:

@@ -71,6 +71,14 @@ EN = {
     "login_code_prompt": "Enter the login code Telegram just sent you:",
     "login_password_prompt": "Enter your two-factor (2FA) password:",
     "login_title": "Telegram login",
+    "qr_login_button": "🔳 Login via QR code",
+    "qr_login_title": "QR code login",
+    "qr_login_hint": "Open Telegram on your phone → Settings → Devices → "
+                     "Link Desktop Device, then scan this code.",
+    "qr_login_generating": "Generating QR code…",
+    "qr_login_waiting": "Waiting for you to scan…",
+    "qr_login_expired": "Code expired, generating a new one…",
+    "qr_login_success": "Logged in successfully.",
     # backup tab
     "backup_help": "Exports messages deleted in the last 48 h from the admin log "
                    "of a group/channel where you are admin. Saves dump.json + media files.",
@@ -193,6 +201,14 @@ RU = {
     "login_code_prompt": "Введите код входа, который прислал Telegram:",
     "login_password_prompt": "Введите пароль двухфакторной аутентификации (2FA):",
     "login_title": "Вход в Telegram",
+    "qr_login_button": "🔳 Вход по QR-коду",
+    "qr_login_title": "Вход по QR-коду",
+    "qr_login_hint": "Откройте Telegram на телефоне → Настройки → Устройства → "
+                     "Подключить устройство и отсканируйте этот код.",
+    "qr_login_generating": "Генерация QR-кода…",
+    "qr_login_waiting": "Ожидание сканирования…",
+    "qr_login_expired": "Код истёк, генерируется новый…",
+    "qr_login_success": "Вход выполнен успешно.",
     "backup_help": "Экспортирует сообщения, удалённые за последние 48 ч, из журнала "
                    "администратора группы/канала. Сохраняет dump.json + медиафайлы.",
     "backup_group": "ID группы/канала или @username",
