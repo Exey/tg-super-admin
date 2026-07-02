@@ -27,14 +27,19 @@ def _post_link(source, msg_id: int) -> str:
     return f"https://t.me/c/{source.id}/{msg_id}"
 
 
+def _reaction_label(reaction) -> str:
+    from telethon.tl.types import ReactionPaid
+
+    if isinstance(reaction, ReactionPaid):
+        return "⭐"
+    return getattr(reaction, "emoticon", None) or "custom"
+
+
 def _reactions(msg) -> str:
     reactions = getattr(msg, "reactions", None)
     if not reactions or not reactions.results:
         return "none"
-    parts = []
-    for r in reactions.results:
-        emoticon = getattr(r.reaction, "emoticon", None) or "custom"
-        parts.append(f"{emoticon} {r.count}")
+    parts = [f"{_reaction_label(r.reaction)} {r.count}" for r in reactions.results]
     return ", ".join(parts)
 
 
