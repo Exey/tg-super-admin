@@ -74,9 +74,13 @@ def _chunks(text: str, limit: int):
 
 # --------------------------------------------------------------------- tool
 
-async def run_repost(client, p: dict, ctx) -> str:
+async def run_repost(client, p: dict, ctx, accept=None) -> str:
     """p: source, target, mode ('copy'|'forward'), send_stats, delete_original,
-    start_from_id, delay, progress_file"""
+    start_from_id, delay, progress_file
+
+    accept: optional predicate(msg) -> bool. When given, messages that don't
+    match are skipped entirely (used by the "Repost group" tool to only
+    relay posts forwarded from one particular author/source)."""
     source = await resolve_entity(client, p["source"])
     target = await resolve_entity(client, p["target"])
     ctx.log(f"Source: {getattr(source, 'title', p['source'])}")
@@ -155,6 +159,8 @@ async def run_repost(client, p: dict, ctx) -> str:
         if ctx.cancelled():
             break
         if _is_service(msg) or (not msg.text and not msg.media):
+            continue
+        if accept is not None and not accept(msg):
             continue
 
         if msg.grouped_id:

@@ -10,8 +10,68 @@ Confirmation (typed "DELETE") happens in the GUI before this starts.
 from __future__ import annotations
 
 import asyncio
+import json
 
 from .common import resolve_entity, retry
+
+ALBUM_SPAN = 9  # Telegram albums max out at 10 items -> +/-9 IDs covers any album
+
+
+async def scan_keep_candidates(client, p: dict, ctx) -> str:
+    """p: channel, ids (list[int]) — read-only preview for the Cleaner's
+    "Add from list": fetches each message, collapses whole albums into a
+    single entry (by scanning the neighboring IDs for a shared grouped_id),
+    and returns a JSON blob {"cancelled": bool, "items": [...]} for the GUI
+    to show in a check-list dialog before anything is added to the keep list.
+    """
+    channel = await resolve_entity(client, p["channel"])
+    requested = sorted({int(i) for i in p["ids"]})
+    total = len(requested)
+    ctx.log(f"Fetching {total} message(s) from "
+            f"{getattr(channel, 'title', p['channel'])}…")
+
+    items: list[dict] = []
+    handled: set[int] = set()
+
+    for i, msg_id in enumerate(requested, 1):
+        if ctx.cancelled():
+            break
+        if msg_id in handled:
+            ctx.progress(i, total)
+            continue
+
+        msg = await retry(ctx, client.get_messages, channel, ids=msg_id)
+        if msg is None:
+            items.append({"ids": [msg_id], "text": "not found (deleted or wrong ID)",
+                         "range": ""})
+            handled.add(msg_id)
+            ctx.progress(i, total)
+            continue
+
+        album_ids = [msg_id]
+        if msg.grouped_id:
+            lo, hi = max(1, msg_id - ALBUM_SPAN), msg_id + ALBUM_SPAN
+            neighbors = await retry(ctx, client.get_messages, channel,
+                                    ids=list(range(lo, hi + 1))) or []
+            album_ids = sorted(m.id for m in neighbors
+                               if m is not None and m.grouped_id == msg.grouped_id)
+
+        handled.update(album_ids)
+        text = (msg.text or "").strip().replace("\n", " ")
+        if len(text) > 140:
+            text = text[:140] + "…"
+        if not text:
+            text = "(media, no caption)" if msg.media else "(empty message)"
+
+        items.append({
+            "ids": album_ids,
+            "text": text,
+            "range": (f"{album_ids[0]}–{album_ids[-1]} · {len(album_ids)} items"
+                      if len(album_ids) > 1 else ""),
+        })
+        ctx.progress(i, total)
+
+    return json.dumps({"cancelled": ctx.cancelled(), "items": items})
 
 
 async def run_cleaner(client, p: dict, ctx) -> str:

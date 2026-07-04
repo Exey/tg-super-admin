@@ -8,7 +8,9 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget
 from ..config import Config, config_dir
 from ..i18n import I18n
 from .config_tab import ConfigTab
-from .tool_tabs import BackupTab, CleanerTab, RepostTab, RestoreTab
+from .tool_tabs import (
+    BackupTab, CleanerTab, RepostGroupTab, RepostTab, RestoreTab,
+)
 
 
 class MainWindow(QMainWindow):
@@ -31,15 +33,17 @@ class MainWindow(QMainWindow):
         self.backup_tab = BackupTab(self.cfg, self.i18n)
         self.restore_tab = RestoreTab(self.cfg, self.i18n)
         self.repost_tab = RepostTab(self.cfg, self.i18n)
+        self.repost_group_tab = RepostGroupTab(self.cfg, self.i18n)
         self.cleaner_tab = CleanerTab(self.cfg, self.i18n)
 
-        self.tool_tabs = [self.backup_tab, self.restore_tab,
-                          self.repost_tab, self.cleaner_tab]
+        self.tool_tabs = [self.backup_tab, self.restore_tab, self.repost_tab,
+                          self.repost_group_tab, self.cleaner_tab]
 
         self.tabs.addTab(self.config_tab, tr("tab_config"))
         self.tabs.addTab(self.backup_tab, tr("tab_backup"))
         self.tabs.addTab(self.restore_tab, tr("tab_restore"))
         self.tabs.addTab(self.repost_tab, tr("tab_repost"))
+        self.tabs.addTab(self.repost_group_tab, tr("tab_repost_group"))
         self.tabs.addTab(self.cleaner_tab, tr("tab_cleaner"))
 
         self.config_tab.profile_changed.connect(self._refresh_tab_defaults)
@@ -123,6 +127,9 @@ class MainWindow(QMainWindow):
             self.restore_tab.topic_spin.setValue(0)
         self.repost_tab.source_edit.setText(self.cfg.get("SOURCE_CHANNEL"))
         self.repost_tab.target_edit.setText(self.cfg.get("TARGET_CHANNEL"))
+        self.repost_group_tab.source_edit.setText(self.cfg.get("REPOST_GROUP_SOURCE"))
+        self.repost_group_tab.author_edit.setText(self.cfg.get("REPOST_GROUP_AUTHOR"))
+        self.repost_group_tab.target_edit.setText(self.cfg.get("REPOST_GROUP_TARGET"))
         self.cleaner_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
         self.cleaner_tab.keep_list.clear()
         self.cleaner_tab._load_keep_ids()

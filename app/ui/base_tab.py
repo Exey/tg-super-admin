@@ -39,6 +39,7 @@ class ToolTab(QWidget):
         self.stop_btn.clicked.connect(self.on_stop)
         buttons.addWidget(self.run_btn)
         buttons.addWidget(self.stop_btn)
+        self.extra_buttons(buttons)
         buttons.addStretch()
         root.addLayout(buttons)
 
@@ -69,41 +70,63 @@ class ToolTab(QWidget):
     def tool_func(self):
         raise NotImplementedError
 
+    def extra_buttons(self, layout: QHBoxLayout) -> None:
+        """Hook for subclasses to add buttons next to Run/Stop (e.g. a
+        read-only "Count" action). No-op by default."""
+
+    def set_extra_buttons_enabled(self, enabled: bool) -> None:
+        """Hook for subclasses to enable/disable their extra buttons in
+        lockstep with Run/Stop. No-op by default."""
+
     # --------------------------------------------------------- run control
     def is_running(self) -> bool:
         return self.worker is not None and self.worker.isRunning()
 
-    def on_run(self) -> None:
-        if self.is_running():
-            return
+    def check_conn(self) -> bool:
         api_id = self.cfg.get("API_ID").strip()
         api_hash = self.cfg.get("API_HASH").strip()
         phone = self.cfg.get("PHONE_NUMBER").strip()
         if not (api_id and api_hash and phone):
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("missing_conn"))
-            return
+            return False
+        return True
 
-        params = self.collect_params()
-        if params is None:
-            return
+    def launch(self, func, params: dict, done_slot=None) -> None:
+        """Start `func` (an async tool coroutine) in a background worker.
+        Shared by on_run and any auxiliary action a subclass adds (e.g. a
+        "Count" button) so they get the same login/cancel/log wiring.
 
+        done_slot: called with (ok, msg) when the worker finishes, instead of
+        the default self.on_done — for actions whose result needs custom
+        handling (e.g. parsing a JSON payload to open a review dialog)."""
         conn = {
-            "api_id": api_id,
-            "api_hash": api_hash,
-            "phone": phone,
+            "api_id": self.cfg.get("API_ID").strip(),
+            "api_hash": self.cfg.get("API_HASH").strip(),
+            "phone": self.cfg.get("PHONE_NUMBER").strip(),
             "session": self.cfg.session_path(),
         }
-        self.worker = ToolWorker(self.tool_func(), params, conn, parent=self)
+        self.worker = ToolWorker(func, params, conn, parent=self)
         self.worker.sig_log.connect(self.append_log)
         self.worker.sig_progress.connect(self.on_progress)
-        self.worker.sig_done.connect(self.on_done)
+        self.worker.sig_done.connect(done_slot or self.on_done)
         self.worker.sig_ask.connect(self.on_ask)
 
         self.run_btn.setEnabled(False)
+        self.set_extra_buttons_enabled(False)
         self.stop_btn.setEnabled(True)
         self.progress.setRange(0, 0)  # busy until first progress signal
         self.worker.start()
+
+    def on_run(self) -> None:
+        if self.is_running():
+            return
+        if not self.check_conn():
+            return
+        params = self.collect_params()
+        if params is None:
+            return
+        self.launch(self.tool_func(), params)
 
     def on_stop(self) -> None:
         if self.worker:
@@ -125,6 +148,7 @@ class ToolTab(QWidget):
     def on_done(self, ok: bool, msg: str) -> None:
         self.append_log(self.tr_("done_ok" if ok else "done_fail", msg=msg))
         self.run_btn.setEnabled(True)
+        self.set_extra_buttons_enabled(True)
         self.stop_btn.setEnabled(False)
         if self.progress.maximum() == 0:
             self.progress.setRange(0, 1)

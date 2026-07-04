@@ -19,6 +19,9 @@ FIELDS = [
     "SOURCE_CHANNEL",     # repost source
     "TARGET_CHANNEL",     # repost target
     "CLEANER_KEEP_IDS",   # comma-separated message IDs to skip when cleaning
+    "REPOST_GROUP_SOURCE",  # repost-group source (a group, not a channel)
+    "REPOST_GROUP_AUTHOR",  # repost-group author/source-of-repost filter
+    "REPOST_GROUP_TARGET",  # repost-group target
 ]
 
 # Only these are shown on the Config tab; the rest live on their tool tabs.

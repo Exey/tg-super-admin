@@ -8,6 +8,7 @@ EN = {
     "tab_backup": "💾 Backup deleted",
     "tab_restore": "📤 Restore to topic",
     "tab_repost": "🔁 Repost channel",
+    "tab_repost_group": "🔀 Repost group",
     "tab_cleaner": "🧹 Cleaner",
     # generic
     "run": "▶ Run",
@@ -113,6 +114,20 @@ EN = {
     "delete_original": "⚠ Delete original message from source after repost",
     "delete_original_note": "Deletion is irreversible. Test on a spare channel first!",
     "start_from_id": "Start after message ID (0 = resume from progress)",
+    # repost group tab
+    "repost_group_help": "Reposts only the messages inside a group that were "
+                         "themselves forwarded from one chosen author/channel — "
+                         "handy when a group mixes reposts from many sources and "
+                         "you only want to relay one of them. Use “Count matches” "
+                         "first to confirm you picked the right author/source "
+                         "before running the real repost.",
+    "repost_group_source": "Source group",
+    "repost_group_author": "Only repost forwards from (username, ID, or t.me link "
+                           "of the original author/channel)",
+    "repost_group_target": "Target Channel/Group",
+    "repost_group_need_source_author": "Fill in both the source group and the "
+                                       "author/source filter first.",
+    "count_matches": "🔢 Count matches",
     # cleaner tab
     "cleaner_help": "Deletes ALL messages in a channel/group where you have "
                     "“Delete messages” admin right — except the posts you add "
@@ -122,12 +137,29 @@ EN = {
     "keep_ids": "Keep these posts (skip deletion)",
     "keep_placeholder": "Message ID or t.me link (e.g. 133737 or https://t.me/c/2805046984/133737)",
     "keep_add": "➕ Add",
+    "keep_add_list": "📋 Add from list…",
     "keep_open": "🔗 Open",
     "keep_remove": "🗑 Remove",
     "keep_hint": "Double-click a row (or press Open) to view the post in "
                  "Telegram and verify it's the right one.",
     "keep_invalid": "Could not parse a message ID from that input.",
     "keep_duplicate": "This message ID is already in the list.",
+    "keep_list_title": "Add posts from a list",
+    "keep_list_prompt": "Paste message IDs or t.me links, one per line "
+                        "(or separated by spaces/commas):",
+    "keep_list_found": "Found {n} post(s)/album(s). Review below.",
+    "keep_list_empty": "None of the pasted links/IDs could be found.",
+    "keep_list_added": "Added {n} message ID(s) to the keep list.",
+    "keep_list_dialog_title": "Review before adding to keep list",
+    "keep_list_dialog_hint": "Uncheck anything that isn't the post you meant. "
+                            "Double-click a row to open it in Telegram and "
+                            "confirm the author/source is right. Checked "
+                            "posts (whole album if any) are added on OK.",
+    "keep_select_all": "Select all",
+    "keep_select_none": "Select none",
+    "keep_col_link": "Link",
+    "keep_col_text": "Post text",
+    "keep_col_range": "Album range",
     "batch_size": "Batch size",
     "cleaner_warning": "⚠️ THIS DELETES EVERY MESSAGE IN THE CHANNEL. IRREVERSIBLE.",
     "confirm_title": "Confirm deletion",
@@ -142,6 +174,7 @@ RU = {
     "tab_backup": "💾 Бэкап удалённых",
     "tab_restore": "📤 Восстановить в топик",
     "tab_repost": "🔁 Репост канала",
+    "tab_repost_group": "🔀 Репост группы",
     "tab_cleaner": "🧹 Очистка",
     "run": "▶ Запустить",
     "stop": "⏹ Остановить",
@@ -240,6 +273,19 @@ RU = {
     "delete_original": "⚠ Удалять оригинал из источника после репоста",
     "delete_original_note": "Удаление необратимо. Сначала проверьте на тестовом канале!",
     "start_from_id": "Начать после сообщения с ID (0 = продолжить по прогрессу)",
+    "repost_group_help": "Репостит только те сообщения в группе, которые сами "
+                         "являются пересылкой от одного выбранного автора/канала — "
+                         "удобно, когда в группе смешаны репосты из разных "
+                         "источников, а нужен только один из них. Сначала "
+                         "нажмите «Посчитать совпадения», чтобы убедиться, что "
+                         "автор/источник выбран верно, прежде чем запускать репост.",
+    "repost_group_source": "Группа-источник",
+    "repost_group_author": "Репостить только пересылки от (username, ID или "
+                           "ссылка t.me на автора/канал-оригинал)",
+    "repost_group_target": "Канал/группа-приёмник",
+    "repost_group_need_source_author": "Сначала укажите группу-источник и "
+                                       "фильтр автора/источника.",
+    "count_matches": "🔢 Посчитать совпадения",
     "cleaner_help": "Удаляет ВСЕ сообщения в канале/группе, где у вас есть право "
                     "«Удаление сообщений» — кроме постов из списка исключений "
                     "ниже. Если сохранённый пост — часть альбома (2–10 медиа), "
@@ -248,12 +294,29 @@ RU = {
     "keep_ids": "Сохранить эти посты (не удалять)",
     "keep_placeholder": "ID сообщения или ссылка t.me (напр. 133737 или https://t.me/c/2805046984/133737)",
     "keep_add": "➕ Добавить",
+    "keep_add_list": "📋 Добавить из списка…",
     "keep_open": "🔗 Открыть",
     "keep_remove": "🗑 Убрать",
     "keep_hint": "Двойной клик по строке (или «Открыть») — откроет пост в "
                  "Telegram, чтобы проверить, что он тот самый.",
     "keep_invalid": "Не удалось распознать ID сообщения из введённого текста.",
     "keep_duplicate": "Такой ID уже есть в списке.",
+    "keep_list_title": "Добавить посты из списка",
+    "keep_list_prompt": "Вставьте ID сообщений или ссылки t.me, по одной на "
+                        "строку (или через пробел/запятую):",
+    "keep_list_found": "Найдено постов/альбомов: {n}. Проверьте список ниже.",
+    "keep_list_empty": "Ни одна из вставленных ссылок/ID не найдена.",
+    "keep_list_added": "В список сохранения добавлено ID: {n}.",
+    "keep_list_dialog_title": "Проверка перед добавлением в список сохранения",
+    "keep_list_dialog_hint": "Снимите галочку с того, что не нужно сохранять. "
+                            "Двойной клик по строке откроет пост в Telegram, "
+                            "чтобы проверить автора/источник. Отмеченные посты "
+                            "(и весь альбом, если он есть) добавятся по кнопке OK.",
+    "keep_select_all": "Выбрать всё",
+    "keep_select_none": "Снять выбор",
+    "keep_col_link": "Ссылка",
+    "keep_col_text": "Текст поста",
+    "keep_col_range": "Диапазон альбома",
     "batch_size": "Размер пачки",
     "cleaner_warning": "⚠️ УДАЛЯЕТ ВСЕ СООБЩЕНИЯ В КАНАЛЕ. НЕОБРАТИМО.",
     "confirm_title": "Подтверждение удаления",
