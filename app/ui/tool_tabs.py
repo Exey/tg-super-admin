@@ -830,6 +830,7 @@ class UsersExtractorTab(ToolTab):
         self.table_a = QTableWidget(0, 2)
         self.table_b = QTableWidget(0, 2)
         self.table_delta = QTableWidget(0, 2)
+        self._col_labels: dict[QTableWidget, tuple[QLabel, str]] = {}
         for table, title in (
             (self.table_a, self.tr_("users_extractor_col_a")),
             (self.table_b, self.tr_("users_extractor_col_b")),
@@ -840,8 +841,11 @@ class UsersExtractorTab(ToolTab):
             col.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
             col_lay = QVBoxLayout(col)
             col_lay.setContentsMargins(0, 0, 0, 0)
-            col_lay.addWidget(QLabel(f"<b>{title}</b>"))
+            label = QLabel()
+            col_lay.addWidget(label)
             col_lay.addWidget(table)
+            self._col_labels[table] = (label, title)
+            self._update_col_label(table)
             tables_row.addWidget(col, stretch=1)
         results_lay.addLayout(tables_row)
 
@@ -870,6 +874,10 @@ class UsersExtractorTab(ToolTab):
         table.cellDoubleClicked.connect(
             lambda row, _col, t=table: self._open_user(t, row))
 
+    def _update_col_label(self, table: QTableWidget) -> None:
+        label, title = self._col_labels[table]
+        label.setText(f"<b>{title} ({table.rowCount()})</b>")
+
     def _fill_table(self, table: QTableWidget, members: list[dict]) -> None:
         table.setRowCount(len(members))
         for row, m in enumerate(members):
@@ -878,6 +886,7 @@ class UsersExtractorTab(ToolTab):
             table.setItem(row, 0, name_item)
             uname = f"@{m['username']}" if m.get("username") else f"#{m['id']}"
             table.setItem(row, 1, QTableWidgetItem(uname))
+        self._update_col_label(table)
 
     def _member_at(self, table: QTableWidget, row: int) -> dict | None:
         item = table.item(row, 0)

@@ -6,7 +6,8 @@
       "Bash(python3 -c \"import telethon; print\\(telethon.__file__\\)\")",
       "Bash(find / -name \"messageparse.py\" -path \"*telethon*\")",
       "Bash(pkill -9 -f \"PostImageReplacerTab\")",
-      "Bash(pkill -9 -f \"QT_QPA_PLATFORM=offscreen python3\")"
+      "Bash(pkill -9 -f \"QT_QPA_PLATFORM=offscreen python3\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/Users/exey/tg-super-admin/app/ui/tool_tabs.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }
