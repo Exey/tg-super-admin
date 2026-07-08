@@ -123,7 +123,7 @@ def build_user_link(member: dict) -> str:
     username = member.get("username")
     if username:
         return f"https://t.me/{username}"
-    return f"tg://openmessage?user_id={member['id']}"
+    return f"tg://user?id={member['id']}"
 
 
 def render_users_html(title: str, sections: list[tuple[str, list[dict]]]) -> str:
@@ -884,9 +884,24 @@ class UsersExtractorTab(ToolTab):
             name_item = QTableWidgetItem(m["name"])
             name_item.setData(Qt.ItemDataRole.UserRole, m)
             table.setItem(row, 0, name_item)
-            uname = f"@{m['username']}" if m.get("username") else f"#{m['id']}"
-            table.setItem(row, 1, QTableWidgetItem(uname))
+            table.setCellWidget(row, 1, self._make_username_cell(m))
         self._update_col_label(table)
+
+    def _make_username_cell(self, m: dict) -> QWidget:
+        text = f"@{m['username']}" if m.get("username") else f"#{m['id']}"
+        cell = QWidget()
+        lay = QHBoxLayout(cell)
+        lay.setContentsMargins(4, 0, 4, 0)
+        lay.addWidget(QLabel(text), stretch=1)
+        btn = QPushButton("📋")
+        btn.setFixedWidth(24)
+        btn.setToolTip(self.tr_("users_extractor_copy_username"))
+        btn.clicked.connect(lambda _=False, mm=m: self._copy_username_or_link(mm))
+        lay.addWidget(btn)
+        return cell
+
+    def _copy_username_or_link(self, m: dict) -> None:
+        QApplication.clipboard().setText(m.get("username") or build_user_link(m))
 
     def _member_at(self, table: QTableWidget, row: int) -> dict | None:
         item = table.item(row, 0)
@@ -907,7 +922,7 @@ class UsersExtractorTab(ToolTab):
         open_act = menu.addAction(self.tr_("keep_open"))
         chosen = menu.exec(table.viewport().mapToGlobal(pos))
         if chosen == copy_act:
-            QApplication.clipboard().setText(m.get("username") or str(m["id"]))
+            self._copy_username_or_link(m)
         elif chosen == open_act:
             QDesktopServices.openUrl(QUrl(build_user_link(m)))
 
