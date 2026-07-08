@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c ' *)",
+      "Bash(python3 -m py_compile app/ui/tool_tabs.py app/i18n.py app/ui/base_tab.py app/ui/config_tab.py app/ui/qr_login_dialog.py)",
+      "Bash(python3 -c \"import telethon; print\\(telethon.__file__\\)\")",
+      "Bash(find / -name \"messageparse.py\" -path \"*telethon*\")",
+      "Bash(pkill -9 -f \"PostImageReplacerTab\")",
+      "Bash(pkill -9 -f \"QT_QPA_PLATFORM=offscreen python3\")"
+    ]
+  }
+}

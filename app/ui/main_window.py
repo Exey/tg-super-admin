@@ -9,7 +9,8 @@ from ..config import Config, config_dir
 from ..i18n import I18n
 from .config_tab import ConfigTab
 from .tool_tabs import (
-    BackupTab, CleanerTab, RepostGroupTab, RepostTab, RestoreTab,
+    BackupTab, CleanerTab, PostImageReplacerTab, RepostGroupTab, RepostTab,
+    RestoreTab, UsersExtractorTab,
 )
 
 
@@ -35,9 +36,12 @@ class MainWindow(QMainWindow):
         self.repost_tab = RepostTab(self.cfg, self.i18n)
         self.repost_group_tab = RepostGroupTab(self.cfg, self.i18n)
         self.cleaner_tab = CleanerTab(self.cfg, self.i18n)
+        self.users_extractor_tab = UsersExtractorTab(self.cfg, self.i18n)
+        self.post_replacer_tab = PostImageReplacerTab(self.cfg, self.i18n)
 
         self.tool_tabs = [self.backup_tab, self.restore_tab, self.repost_tab,
-                          self.repost_group_tab, self.cleaner_tab]
+                          self.repost_group_tab, self.cleaner_tab,
+                          self.users_extractor_tab, self.post_replacer_tab]
 
         self.tabs.addTab(self.config_tab, tr("tab_config"))
         self.tabs.addTab(self.backup_tab, tr("tab_backup"))
@@ -45,6 +49,8 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.repost_tab, tr("tab_repost"))
         self.tabs.addTab(self.repost_group_tab, tr("tab_repost_group"))
         self.tabs.addTab(self.cleaner_tab, tr("tab_cleaner"))
+        self.tabs.addTab(self.users_extractor_tab, tr("tab_users_extractor"))
+        self.tabs.addTab(self.post_replacer_tab, tr("tab_post_replacer"))
 
         self.config_tab.profile_changed.connect(self._refresh_tab_defaults)
 
@@ -133,6 +139,11 @@ class MainWindow(QMainWindow):
         self.cleaner_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
         self.cleaner_tab.keep_list.clear()
         self.cleaner_tab._load_keep_ids()
+        self.users_extractor_tab.group_a_edit.setText(
+            self.cfg.get("USERS_EXTRACTOR_GROUP_A"))
+        self.users_extractor_tab.group_b_edit.setText(
+            self.cfg.get("USERS_EXTRACTOR_GROUP_B"))
+        self.post_replacer_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
 
     # -------------------------------------------------------------- close
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)

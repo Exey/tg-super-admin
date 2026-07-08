@@ -24,7 +24,7 @@ class ToolTab(QWidget):
 
         self.help_label = QLabel(self.help_text())
         self.help_label.setWordWrap(True)
-        self.help_label.setStyleSheet("color: palette(mid);")
+        self.help_label.setStyleSheet("color: palette(placeholder-text);")
         root.addWidget(self.help_label)
 
         self.form = QFormLayout()

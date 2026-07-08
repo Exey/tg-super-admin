@@ -91,7 +91,7 @@ class ConfigTab(QWidget):
         root.addWidget(box)
 
         loc = QLabel(tr("config_location", path=str(self.cfg.path)))
-        loc.setStyleSheet("color: palette(mid);")
+        loc.setStyleSheet("color: palette(placeholder-text);")
         loc.setWordWrap(True)
         root.addWidget(loc)
         root.addStretch()

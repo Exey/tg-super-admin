@@ -10,6 +10,8 @@ EN = {
     "tab_repost": "🔁 Repost channel",
     "tab_repost_group": "🔀 Repost group",
     "tab_cleaner": "🧹 Cleaner",
+    "tab_users_extractor": "🧮 Users diff",
+    "tab_post_replacer": "🖼 Post replacer",
     # generic
     "run": "▶ Run",
     "stop": "⏹ Stop",
@@ -140,6 +142,8 @@ EN = {
     "keep_add_list": "📋 Add from list…",
     "keep_open": "🔗 Open",
     "keep_remove": "🗑 Remove",
+    "keep_remove_all": "🗑 Remove All",
+    "keep_remove_all_confirm": "Remove all posts from the keep list?",
     "keep_hint": "Double-click a row (or press Open) to view the post in "
                  "Telegram and verify it's the right one.",
     "keep_invalid": "Could not parse a message ID from that input.",
@@ -166,6 +170,55 @@ EN = {
     "confirm_delete_prompt": "Type DELETE to confirm wiping all messages:",
     "confirm_word": "DELETE",
     "confirm_wrong": "Confirmation text did not match — aborted.",
+    # users extractor tab
+    "users_extractor_help": "Fetches the member lists of two groups and lets "
+                            "you compare them: who's only in A, only in B, "
+                            "in both, or in either. Double-click a user (or "
+                            "right-click) to copy their username or open "
+                            "them in Telegram.",
+    "users_extractor_group_a": "Group A",
+    "users_extractor_group_b": "Group B",
+    "users_extractor_need_groups": "Fill in both Group A and Group B first.",
+    "users_extractor_algo": "Show",
+    "algo_a_only": "In A, not in B",
+    "algo_b_only": "In B, not in A",
+    "algo_intersection": "In both (intersection)",
+    "algo_symmetric_diff": "In either, not both (symmetric diff)",
+    "users_extractor_col_a": "Group A members",
+    "users_extractor_col_b": "Group B members",
+    "users_extractor_col_delta": "Result",
+    "users_extractor_col_name": "Name",
+    "users_extractor_col_username": "Username / ID",
+    "users_extractor_copy_username": "📋 Copy username",
+    "users_extractor_done": "Group A: {a} member(s). Group B: {b} member(s).",
+    "users_extractor_save_html": "💾 Save as HTML…",
+    "users_extractor_saved": "Saved to {path}",
+    "users_extractor_nothing_to_save": "Nothing to save yet — run the comparison first.",
+    # post image replacer tab
+    "post_replacer_help": "Edits specific posts in a channel: swap in a new "
+                          "image and/or rewrite the caption, one mapping per "
+                          "post. Load the post list, optionally skip some "
+                          "IDs, then set an image/text per row (or bulk-fill "
+                          "and adjust individual rows after). Leaving a "
+                          "row's image or text empty keeps the original.",
+    "post_replacer_channel": "Channel / group ID or @username",
+    "post_replacer_posts": "Posts to edit (IDs, ranges like 100-110, or t.me links)",
+    "post_replacer_posts_placeholder": "e.g. 133730-133750, 133780",
+    "post_replacer_skip": "Skip these posts (IDs/ranges, left untouched)",
+    "post_replacer_skip_placeholder": "e.g. 133735, 133790-133792",
+    "post_replacer_load": "📋 Load posts",
+    "post_replacer_bulk": "Bulk fill (applies to every row below)",
+    "post_replacer_apply_all": "Apply to all rows",
+    "post_replacer_table": "Per-post replacement",
+    "post_replacer_col_id": "ID",
+    "post_replacer_col_link": "Link",
+    "post_replacer_col_image": "New image",
+    "post_replacer_col_text": "New text",
+    "post_replacer_keep_original": "(keep original)",
+    "post_replacer_no_posts": "Could not parse any post IDs from that input.",
+    "post_replacer_no_rows": "Load posts first, then set at least one new "
+                            "image or new text on a row.",
+    "post_replacer_bad_image": "Image file not found: {path}",
 }
 
 RU = {
@@ -176,6 +229,8 @@ RU = {
     "tab_repost": "🔁 Репост канала",
     "tab_repost_group": "🔀 Репост группы",
     "tab_cleaner": "🧹 Очистка",
+    "tab_users_extractor": "🧮 Разница юзеров",
+    "tab_post_replacer": "🖼 Замена в постах",
     "run": "▶ Запустить",
     "stop": "⏹ Остановить",
     "browse": "Обзор…",
@@ -297,6 +352,8 @@ RU = {
     "keep_add_list": "📋 Добавить из списка…",
     "keep_open": "🔗 Открыть",
     "keep_remove": "🗑 Убрать",
+    "keep_remove_all": "🗑 Убрать все",
+    "keep_remove_all_confirm": "Убрать все посты из списка сохранения?",
     "keep_hint": "Двойной клик по строке (или «Открыть») — откроет пост в "
                  "Telegram, чтобы проверить, что он тот самый.",
     "keep_invalid": "Не удалось распознать ID сообщения из введённого текста.",
@@ -323,6 +380,58 @@ RU = {
     "confirm_delete_prompt": "Введите DELETE, чтобы подтвердить удаление всех сообщений:",
     "confirm_word": "DELETE",
     "confirm_wrong": "Текст подтверждения не совпал — отменено.",
+    "users_extractor_help": "Загружает списки участников двух групп и "
+                            "позволяет сравнить их: кто есть только в A, "
+                            "только в B, в обеих или хотя бы в одной. "
+                            "Двойной клик (или правая кнопка мыши) по "
+                            "пользователю — скопировать username или открыть "
+                            "его в Telegram.",
+    "users_extractor_group_a": "Группа A",
+    "users_extractor_group_b": "Группа B",
+    "users_extractor_need_groups": "Сначала укажите обе группы — A и B.",
+    "users_extractor_algo": "Показать",
+    "algo_a_only": "Есть в A, нет в B",
+    "algo_b_only": "Есть в B, нет в A",
+    "algo_intersection": "Есть в обеих (пересечение)",
+    "algo_symmetric_diff": "Есть хотя бы в одной, но не в обеих (симметр. разность)",
+    "users_extractor_col_a": "Участники группы A",
+    "users_extractor_col_b": "Участники группы B",
+    "users_extractor_col_delta": "Результат",
+    "users_extractor_col_name": "Имя",
+    "users_extractor_col_username": "Username / ID",
+    "users_extractor_copy_username": "📋 Скопировать username",
+    "users_extractor_done": "Группа A: участников {a}. Группа B: участников {b}.",
+    "users_extractor_save_html": "💾 Сохранить в HTML…",
+    "users_extractor_saved": "Сохранено в {path}",
+    "users_extractor_nothing_to_save": "Пока нечего сохранять — сначала запустите сравнение.",
+    "post_replacer_help": "Редактирует конкретные посты в канале: меняет "
+                          "картинку и/или текст подписи — своя замена для "
+                          "каждого поста. Сначала загрузите список постов, "
+                          "при необходимости укажите ID для пропуска, затем "
+                          "задайте картинку/текст в каждой строке (или "
+                          "заполните все разом и поправьте отдельные строки "
+                          "вручную). Пустое поле в строке — оригинал не "
+                          "меняется.",
+    "post_replacer_channel": "ID канала/группы или @username",
+    "post_replacer_posts": "Посты для редактирования (ID, диапазоны вида "
+                           "100-110 или ссылки t.me)",
+    "post_replacer_posts_placeholder": "например 133730-133750, 133780",
+    "post_replacer_skip": "Пропустить эти посты (ID/диапазоны, не трогать)",
+    "post_replacer_skip_placeholder": "например 133735, 133790-133792",
+    "post_replacer_load": "📋 Загрузить посты",
+    "post_replacer_bulk": "Заполнить разом (для всех строк ниже)",
+    "post_replacer_apply_all": "Применить ко всем строкам",
+    "post_replacer_table": "Замена по каждому посту",
+    "post_replacer_col_id": "ID",
+    "post_replacer_col_link": "Ссылка",
+    "post_replacer_col_image": "Новая картинка",
+    "post_replacer_col_text": "Новый текст",
+    "post_replacer_keep_original": "(оставить как есть)",
+    "post_replacer_no_posts": "Не удалось распознать ни одного ID поста из "
+                              "введённого текста.",
+    "post_replacer_no_rows": "Сначала загрузите посты, затем задайте картинку "
+                             "или текст хотя бы в одной строке.",
+    "post_replacer_bad_image": "Файл картинки не найден: {path}",
 }
 
 LANGS = {"en": EN, "ru": RU}

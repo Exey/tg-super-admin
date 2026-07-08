@@ -40,7 +40,7 @@ class QrLoginDialog(QDialog):
 
         self.status_label = QLabel(tr("qr_login_generating"))
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: palette(mid);")
+        self.status_label.setStyleSheet("color: palette(placeholder-text);")
         layout.addWidget(self.status_label)
 
         cancel_btn = QPushButton(tr("stop"))

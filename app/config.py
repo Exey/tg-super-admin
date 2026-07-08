@@ -22,6 +22,8 @@ FIELDS = [
     "REPOST_GROUP_SOURCE",  # repost-group source (a group, not a channel)
     "REPOST_GROUP_AUTHOR",  # repost-group author/source-of-repost filter
     "REPOST_GROUP_TARGET",  # repost-group target
+    "USERS_EXTRACTOR_GROUP_A",  # users extractor: first group to compare
+    "USERS_EXTRACTOR_GROUP_B",  # users extractor: second group to compare
 ]
 
 # Only these are shown on the Config tab; the rest live on their tool tabs.
