@@ -10,7 +10,10 @@ UI is switchable between **English** and **Русский** (menu → Language).
 | 💾 **Backup deleted** | Exports messages deleted in the last ~48 h from a group's admin log (requires admin). Saves `dump.json` + media files named by message ID. |
 | 📤 **Restore to topic** | Re-sends a backup into any chat, optionally into a specific forum topic. Daily date separators, size limit for media, resume, "start after text" search. |
 | 🔁 **Repost channel** | Reposts every post (albums included) from one channel to another, oldest first. Modes: **Copy** (no "Forwarded from" tag) or **Forward** (keeps the tag). Optional 📊 stats message (views / forwards / reactions / link) before each post, optional **delete original** after repost. Resumable. |
-| 🧹 **Cleaner** | Deletes ALL messages in a channel/group. Requires typing `DELETE` to confirm. |
+| 🔀 **Repost group** | Like Repost channel, but only relays messages inside a group that were themselves forwarded from one chosen author/channel — handy when a group mixes reposts from many sources. **Count matches** first to sanity-check the filter before running for real. |
+| 🧹 **Cleaner** | Deletes ALL messages in a channel/group where you have delete rights, except posts on a **keep list** (add by ID/link, or scan-and-review a pasted list — kept albums are kept whole). Requires typing `DELETE` to confirm. |
+| 🧮 **Users diff** | Fetches the member lists of two groups and compares them: only in A, only in B, in both, or in either. Copy a username or open a member in Telegram from the results table; export the comparison as HTML. |
+| 🖼 **Post replacer** | Edits existing posts in a channel: swap in a new image and/or rewrite the caption, per post. Load a range/list of post IDs (with optional skip list), then bulk-fill or set image/text per row — leaving a row blank keeps the original. |
 
 ## Config
 
