@@ -260,6 +260,14 @@ EN = {
     "channel_top_public_col_channel": "Channel",
     "channel_top_public_col_views": "Views",
     "channel_top_public_col_link": "Link",
+    "channel_top_report_button": "📊 Analytics report",
+    "channel_top_report_empty": "Run the scan first — no posts loaded yet.",
+    "channel_top_report_dialog_title": "Analytics report",
+    "channel_top_report_copy": "📋 Copy to clipboard",
+    "channel_top_report_title": "Analytics of channel {title}",
+    "channel_top_report_private": "Top 7 {emoji} Reposts",
+    "channel_top_report_views": "Top 7 {emoji} Views",
+    "channel_top_report_reactions": "Top 7 {emoji} Reactions",
 }
 
 RU = {
@@ -515,6 +523,14 @@ RU = {
     "channel_top_public_col_channel": "Канал",
     "channel_top_public_col_views": "Просмотры",
     "channel_top_public_col_link": "Ссылка",
+    "channel_top_report_button": "📊 Аналитический отчёт",
+    "channel_top_report_empty": "Сначала запустите сканирование — посты ещё не загружены.",
+    "channel_top_report_dialog_title": "Аналитический отчёт",
+    "channel_top_report_copy": "📋 Скопировать",
+    "channel_top_report_title": "Аналитика канала {title}",
+    "channel_top_report_private": "Топ 7 {emoji} Репостов",
+    "channel_top_report_views": "Топ 7 {emoji} Просмотров",
+    "channel_top_report_reactions": "Топ 7 {emoji} Реакций",
 }
 
 LANGS = {"en": EN, "ru": RU}

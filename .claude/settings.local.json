@@ -17,7 +17,10 @@
       "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python -c \"import app.ui.main_window; import app.tools.channel_top; print\\('imports OK'\\)\")",
       "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python -c \"import app.ui.main_window\")",
       "Bash(.venv/bin/python -m py_compile app/tools/channel_top.py app/ui/tool_tabs.py app/i18n.py)",
-      "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py)"
+      "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py)",
+      "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py app/i18n.py)",
+      "Bash(kill -9 27673)",
+      "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py app/i18n.py app/tools/channel_top.py)"
     ]
   }
 }

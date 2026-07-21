@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
     QDialogButtonBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QHeaderView,
     QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
-    QMessageBox, QPushButton, QRadioButton, QSizePolicy, QSpinBox,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QSizePolicy,
+    QSpinBox, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from ..tools.backup import run_backup
@@ -1212,6 +1212,41 @@ class PublicForwardsDialog(QDialog):
             QDesktopServices.openUrl(QUrl(item.text()))
 
 
+# ======================================================= Channel top report
+
+class ChannelReportDialog(QDialog):
+    """Plain-text analytics summary — top posts by private reposts, views
+    and reactions — read-only, for copying elsewhere (Telegram message,
+    email, doc, …)."""
+
+    def __init__(self, parent, i18n, text: str) -> None:
+        super().__init__(parent)
+        self._text = text
+        self.setWindowTitle(i18n.tr("channel_top_report_dialog_title"))
+        self.resize(640, 480)
+
+        root = QVBoxLayout(self)
+        view = QPlainTextEdit()
+        view.setReadOnly(True)
+        view.setPlainText(text)
+        root.addWidget(view)
+
+        row = QHBoxLayout()
+        copy_btn = QPushButton(i18n.tr("channel_top_report_copy"))
+        copy_btn.clicked.connect(self._copy)
+        row.addWidget(copy_btn)
+        row.addStretch()
+        root.addLayout(row)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        root.addWidget(buttons)
+
+    def _copy(self) -> None:
+        QApplication.clipboard().setText(self._text)
+
+
 # ============================================================= Channel top
 
 class ChannelTopTab(ToolTab):
@@ -1232,6 +1267,7 @@ class ChannelTopTab(ToolTab):
 
     def build_form(self) -> None:
         self._rows: list[dict] = []
+        self._title = ""
         self._sort_col = 2          # default: sort by views
         self._sort_desc = True
 
@@ -1287,6 +1323,14 @@ class ChannelTopTab(ToolTab):
         self.table.setMinimumHeight(260)
         # Added to the tab root (not the form row) so it grows on resize.
         self.layout().addWidget(self.table, stretch=1)
+
+    def extra_buttons(self, layout) -> None:
+        self.report_btn = QPushButton(self.tr_("channel_top_report_button"))
+        self.report_btn.clicked.connect(self._show_report)
+        layout.addWidget(self.report_btn)
+
+    def set_extra_buttons_enabled(self, enabled: bool) -> None:
+        self.report_btn.setEnabled(enabled)
 
     # -------------------------------------------------------------- period
     def _current_period(self) -> str:
@@ -1430,6 +1474,7 @@ class ChannelTopTab(ToolTab):
             try:
                 data = json.loads(msg)
                 self._rows = data["rows"]
+                self._title = data.get("title", "")
                 self._sort_col, self._sort_desc = 2, True
                 self._rebuild_table()
                 msg = self.tr_("channel_top_done",
@@ -1437,3 +1482,36 @@ class ChannelTopTab(ToolTab):
             except (ValueError, KeyError):
                 ok = False
         super().on_done(ok, msg)
+
+    # ------------------------------------------------------------- report
+    def _show_report(self) -> None:
+        if not self._rows:
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("channel_top_report_empty"))
+            return
+        ChannelReportDialog(self, self.i18n, self._build_report_text()).exec()
+
+    def _build_report_text(self) -> str:
+        channel_text = self.channel_edit.text().strip()
+        title = self._title or channel_text
+        lines = [self.tr_("channel_top_report_title", title=title), ""]
+        for key, header_key, emoji in (
+            ("forwards", "channel_top_report_private", "🔄"),
+            ("views", "channel_top_report_views", "👁"),
+            ("reactions", "channel_top_report_reactions", "❤️"),
+        ):
+            lines.append(self.tr_(header_key, emoji=emoji))
+            lines.append("")
+            top = sorted(self._rows, key=lambda r: r.get(key, 0), reverse=True)[:7]
+            for i, r in enumerate(top, 1):
+                link = build_post_link(channel_text, r["id"])
+                link = link.removeprefix("https://").removeprefix("http://")
+                snippet = (r.get("text") or "").strip()
+                if len(snippet) > 50:
+                    snippet = snippet[:49] + "…"
+                if not snippet:
+                    snippet = f"#{r['id']}"
+                lines.append(f"{i}. {r.get(key, 0)} {emoji} {link} {snippet}")
+            lines.append("")
+            lines.append("")
+        return "\n".join(lines).rstrip("\n") + "\n"
