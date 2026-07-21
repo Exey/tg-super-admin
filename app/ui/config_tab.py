@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..config import CONN_FIELDS
+from ..worker import CheckLoginWorker
 from .qr_login_dialog import QrLoginDialog
 
 
@@ -71,6 +72,9 @@ class ConfigTab(QWidget):
         qr_btn = QPushButton(tr("qr_login_button"))
         qr_btn.clicked.connect(self._qr_login)
         brow.addWidget(qr_btn)
+        self.check_login_btn = QPushButton(tr("check_login_button"))
+        self.check_login_btn.clicked.connect(self._check_login)
+        brow.addWidget(self.check_login_btn)
         brow.addStretch()
         root.addLayout(brow)
 
@@ -120,6 +124,31 @@ class ConfigTab(QWidget):
                                 self.i18n.tr("missing_conn"))
             return
         QrLoginDialog(self.cfg, self.i18n, self).run_and_report()
+
+    def _check_login(self) -> None:
+        self._store_fields()
+        if not (self.cfg.get("API_ID") and self.cfg.get("API_HASH")):
+            QMessageBox.warning(self, self.i18n.tr("app_title"),
+                                self.i18n.tr("missing_conn"))
+            return
+        self.check_login_btn.setEnabled(False)
+        self.status.setText(self.i18n.tr("check_login_checking"))
+        self._login_worker = CheckLoginWorker(
+            self.cfg.get("API_ID"), self.cfg.get("API_HASH"), self.cfg.session_path(),
+            parent=self,
+        )
+        self._login_worker.sig_done.connect(self._on_check_login_done)
+        self._login_worker.start()
+
+    def _on_check_login_done(self, ok: bool, name: str, phone: str) -> None:
+        tr = self.i18n.tr
+        self.check_login_btn.setEnabled(True)
+        if ok:
+            self.status.setText(tr("check_login_ok", name=name, phone=phone))
+        elif name:
+            self.status.setText(tr("done_fail", msg=name))
+        else:
+            self.status.setText(tr("check_login_not_authorized"))
 
     # ---------------------------------------------------------- profiles
     def _switch_profile(self, name: str) -> None:

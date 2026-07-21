@@ -114,6 +114,46 @@ class ToolWorker(_AskThread):
             await client.disconnect()
 
 
+class CheckLoginWorker(QThread):
+    """Connects with the stored session and reports whether it's authorized."""
+
+    sig_done = Signal(bool, str, str)  # authorized, name, phone (or error in name)
+
+    def __init__(self, api_id: str, api_hash: str, session: str, parent=None) -> None:
+        super().__init__(parent)
+        self.api_id = api_id
+        self.api_hash = api_hash
+        self.session = session
+
+    def run(self) -> None:  # QThread entry
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            ok, name, phone = loop.run_until_complete(self._main())
+            self.sig_done.emit(ok, name, phone)
+        except Exception as exc:  # noqa: BLE001 - surfaced to the GUI
+            self.sig_done.emit(False, str(exc), "")
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            except Exception:
+                pass
+            loop.close()
+
+    async def _main(self) -> tuple[bool, str, str]:
+        from telethon import TelegramClient
+
+        client = TelegramClient(self.session, int(self.api_id), self.api_hash)
+        await client.connect()
+        try:
+            if not await client.is_user_authorized():
+                return False, "", ""
+            me = await client.get_me()
+            return True, str(getattr(me, "first_name", "") or ""), str(getattr(me, "phone", "?"))
+        finally:
+            await client.disconnect()
+
+
 class QrLoginWorker(_AskThread):
     """Authorizes a session by QR code — no phone number required.
 

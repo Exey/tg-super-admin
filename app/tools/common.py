@@ -35,7 +35,13 @@ async def _sleep_cancellable(ctx, seconds: float) -> None:
 
 
 async def resolve_entity(client, value):
-    """Accepts @username, t.me link, or numeric ID (incl. -100… form)."""
+    """Accepts @username, t.me link, or numeric ID (incl. -100… form).
+
+    Raises ValueError with an actionable message if the chat can't be found —
+    either because the ID is wrong, or because Telethon has never seen that
+    peer before (it can't resolve a bare numeric ID unless it's cached the
+    access_hash from a prior dialog/message) and this account isn't a member.
+    """
     from telethon.tl.types import PeerChannel
 
     v = str(value).strip()
@@ -44,14 +50,37 @@ async def resolve_entity(client, value):
     try:
         num = int(v)
     except ValueError:
-        return await client.get_entity(v)
+        try:
+            return await client.get_entity(v)
+        except ValueError as e:
+            raise ValueError(
+                f"Could not find chat '{v}'. Check the @username/link is "
+                f"correct and that this account can see that chat."
+            ) from e
+
     try:
         return await client.get_entity(num)
     except Exception:
-        s = str(num)
-        if s.startswith("-100"):
-            return await client.get_entity(PeerChannel(int(s[4:])))
-        raise
+        pass
+    channel_id = int(str(num)[4:]) if str(num).startswith("-100") else num
+    try:
+        return await client.get_entity(PeerChannel(channel_id))
+    except Exception:
+        pass
+
+    # Last resort: get_entity() only resolves peers Telethon already has an
+    # access_hash for. Scanning dialogs forces a fresh sync from the
+    # account's own chat list, which also covers IDs typed with the wrong
+    # -100 prefix/sign.
+    async for dialog in client.iter_dialogs():
+        if dialog.id == num or getattr(dialog.entity, "id", None) == channel_id:
+            return dialog.entity
+
+    raise ValueError(
+        f"Chat ID '{value}' not found or not accessible with this account. "
+        f"Double-check the ID (e.g. via @userinfobot or web.telegram.org) and "
+        f"make sure this account is a member of that chat."
+    )
 
 
 def read_progress(path: str) -> int:

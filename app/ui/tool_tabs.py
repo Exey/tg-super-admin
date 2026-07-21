@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import datetime
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from ..tools.backup import run_backup
+from ..tools.channel_top import count_posts_in_period, run_channel_top
 from ..tools.cleaner import run_cleaner, scan_keep_candidates
 from ..tools.common import reset_progress
 from ..tools.post_image_replacer import run_post_image_replace
@@ -1158,3 +1160,280 @@ class PostImageReplacerTab(ToolTab):
 
     def tool_func(self):
         return run_post_image_replace
+
+
+# ===================================================== Public reposts dialog
+
+class PublicForwardsDialog(QDialog):
+    """Lists the public channels that forwarded one post — title, views and a
+    clickable t.me link (double-click a row to open it)."""
+
+    def __init__(self, parent, i18n, msg_id: int, items: list[dict]) -> None:
+        super().__init__(parent)
+        self.i18n = i18n
+        self.setWindowTitle(i18n.tr("channel_top_public_title", id=msg_id))
+        self.resize(560, 360)
+
+        root = QVBoxLayout(self)
+        if not items:
+            root.addWidget(QLabel(i18n.tr("channel_top_public_empty")))
+        else:
+            self.table = QTableWidget(len(items), 3)
+            self.table.setHorizontalHeaderLabels([
+                i18n.tr("channel_top_public_col_channel"),
+                i18n.tr("channel_top_public_col_views"),
+                i18n.tr("channel_top_public_col_link"),
+            ])
+            self.table.verticalHeader().setVisible(False)
+            self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.table.setSelectionBehavior(
+                QAbstractItemView.SelectionBehavior.SelectRows)
+            self.table.horizontalHeader().setSectionResizeMode(
+                0, QHeaderView.ResizeMode.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(
+                2, QHeaderView.ResizeMode.Stretch)
+            self.table.cellDoubleClicked.connect(self._open_row)
+            for row, it in enumerate(items):
+                self.table.setItem(row, 0, QTableWidgetItem(it.get("title", "")))
+                self.table.setItem(row, 1, QTableWidgetItem(str(it.get("views", 0))))
+                link_item = QTableWidgetItem(it.get("link", ""))
+                link_item.setToolTip(it.get("link", ""))
+                self.table.setItem(row, 2, link_item)
+            root.addWidget(self.table)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        root.addWidget(buttons)
+
+    def _open_row(self, row: int, _col: int) -> None:
+        item = self.table.item(row, 2)
+        if item and item.text():
+            QDesktopServices.openUrl(QUrl(item.text()))
+
+
+# ============================================================= Channel top
+
+class ChannelTopTab(ToolTab):
+    tool_name = "channel_top"
+
+    # column index -> row-dict key used for sorting (None = not sortable)
+    _SORT_KEYS = {0: "ts", 2: "views", 3: "reactions", 4: "forwards", 5: "public"}
+
+    def __init__(self, cfg, i18n, parent=None) -> None:
+        super().__init__(cfg, i18n, parent)
+        # The results table is the point of this tab, unlike the log-centric
+        # tools — cap the log so window-height growth goes to the table
+        # instead of being split 50/50 with it.
+        self.log_view.setMaximumHeight(160)
+
+    def help_text(self) -> str:
+        return self.tr_("channel_top_help")
+
+    def build_form(self) -> None:
+        self._rows: list[dict] = []
+        self._sort_col = 2          # default: sort by views
+        self._sort_desc = True
+
+        self.channel_edit = QLineEdit(self.cfg.get("CHANNEL_ID"))
+        self.form.addRow(self.tr_("channel_top_channel"), self.channel_edit)
+
+        self.top_spin = QSpinBox()
+        self.top_spin.setRange(1, 1000)
+        self.top_spin.setValue(20)
+        self.form.addRow(self.tr_("channel_top_n"), self.top_spin)
+
+        self._period_keys = ["3m", "6m", "1y", "2y", "3y"]
+        period_row = QWidget()
+        period_lay = QHBoxLayout(period_row)
+        period_lay.setContentsMargins(0, 0, 0, 0)
+        self.period_combo = QComboBox()
+        self.period_combo.addItems([
+            self.tr_("period_3m"), self.tr_("period_6m"), self.tr_("period_1y"),
+            self.tr_("period_2y"), self.tr_("period_3y"),
+        ])
+        self.period_combo.currentIndexChanged.connect(self._on_period_changed)
+        period_lay.addWidget(self.period_combo, stretch=1)
+        self.period_count_label = QLabel("")
+        self.period_count_label.setStyleSheet("color: palette(placeholder-text);")
+        period_lay.addWidget(self.period_count_label)
+        refresh_btn = QPushButton("🔄")
+        refresh_btn.setFixedWidth(32)
+        refresh_btn.setToolTip(self.tr_("channel_top_period_refresh"))
+        refresh_btn.clicked.connect(self._count_period)
+        period_lay.addWidget(refresh_btn)
+        self.form.addRow(self.tr_("channel_top_period"), period_row)
+        self.channel_edit.textChanged.connect(
+            lambda _=None: self.period_count_label.setText(""))
+        self.channel_edit.editingFinished.connect(self._count_period)
+
+        self.public_check = QCheckBox(self.tr_("channel_top_fetch_public"))
+        self.form.addRow("", self.public_check)
+
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels([
+            self.tr_("channel_top_col_date"), self.tr_("channel_top_col_post"),
+            self.tr_("channel_top_col_views"), self.tr_("channel_top_col_reactions"),
+            self.tr_("channel_top_col_private"), self.tr_("channel_top_col_public"),
+        ])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionsClickable(True)
+        header.sectionClicked.connect(self._on_header_clicked)
+        self.table.cellDoubleClicked.connect(self._open_row)
+        self.table.setMinimumHeight(260)
+        # Added to the tab root (not the form row) so it grows on resize.
+        self.layout().addWidget(self.table, stretch=1)
+
+    # -------------------------------------------------------------- period
+    def _current_period(self) -> str:
+        return self._period_keys[self.period_combo.currentIndex()]
+
+    def _has_conn(self) -> bool:
+        return bool(self.cfg.get("API_ID").strip() and self.cfg.get("API_HASH").strip()
+                   and self.cfg.get("PHONE_NUMBER").strip())
+
+    def _on_period_changed(self, _index: int = 0) -> None:
+        self._count_period()
+
+    def _count_period(self) -> None:
+        channel = self.channel_edit.text().strip()
+        if not channel or self.is_running() or not self._has_conn():
+            return
+        self.period_count_label.setText(self.tr_("channel_top_counting"))
+        self.launch(count_posts_in_period,
+                   {"channel": channel, "period": self._current_period()},
+                   done_slot=self._on_period_count_done)
+
+    def _on_period_count_done(self, ok: bool, msg: str) -> None:
+        if ok:
+            try:
+                n = json.loads(msg)["count"]
+            except (ValueError, KeyError):
+                ok = False
+            else:
+                msg = self.tr_("channel_top_period_count", n=n)
+                self.period_count_label.setText(msg)
+        if not ok:
+            self.period_count_label.setText("")
+        ToolTab.on_done(self, ok, msg)  # base reset; our on_done expects scan JSON
+
+    # ------------------------------------------------------------- sorting
+    def _on_header_clicked(self, col: int) -> None:
+        if self._SORT_KEYS.get(col) is None:
+            return
+        if col == self._sort_col:
+            self._sort_desc = not self._sort_desc
+        else:
+            self._sort_col = col
+            self._sort_desc = True
+        self._rebuild_table()
+
+    def _sort_value(self, row: dict, col: int):
+        if col == 5:  # public reposts: unfetched / unavailable sort lowest
+            pub = row.get("public")
+            return pub["count"] if pub and pub["count"] >= 0 else -1
+        return row.get(self._SORT_KEYS[col], 0)
+
+    def _rebuild_table(self) -> None:
+        rows = sorted(self._rows, key=lambda r: self._sort_value(r, self._sort_col),
+                      reverse=self._sort_desc)
+        channel = self.channel_edit.text()
+        self.table.setRowCount(len(rows))
+        for i, r in enumerate(rows):
+            link = build_post_link(channel, r["id"])
+
+            date_item = QTableWidgetItem(self._fmt_date(r.get("date", "")))
+            self.table.setItem(i, 0, date_item)
+
+            post_text = r.get("text", "") or f"#{r['id']}"
+            album_ids = r.get("ids") or [r["id"]]
+            if len(album_ids) > 1:
+                post_text += self.tr_("channel_top_album_suffix", n=len(album_ids))
+            post_item = QTableWidgetItem(post_text)
+            post_item.setToolTip(link)
+            post_item.setData(Qt.ItemDataRole.UserRole, link)
+            self.table.setItem(i, 1, post_item)
+
+            self.table.setItem(i, 2, QTableWidgetItem(str(r.get("views", 0))))
+            self.table.setItem(i, 3, QTableWidgetItem(str(r.get("reactions", 0))))
+            self.table.setItem(i, 4, QTableWidgetItem(str(r.get("forwards", 0))))
+            self.table.setCellWidget(i, 5, self._public_cell(r))
+        self._update_sort_indicator()
+
+    def _update_sort_indicator(self) -> None:
+        order = (Qt.SortOrder.DescendingOrder if self._sort_desc
+                 else Qt.SortOrder.AscendingOrder)
+        self.table.horizontalHeader().setSortIndicatorShown(True)
+        self.table.horizontalHeader().setSortIndicator(self._sort_col, order)
+
+    def _fmt_date(self, iso: str) -> str:
+        if not iso:
+            return ""
+        try:
+            return datetime.fromisoformat(iso).astimezone().strftime("%Y-%m-%d")
+        except ValueError:
+            return iso
+
+    def _public_cell(self, row: dict) -> QWidget:
+        cell = QWidget()
+        lay = QHBoxLayout(cell)
+        lay.setContentsMargins(4, 0, 4, 0)
+        pub = row.get("public")
+        if pub is None:
+            lay.addWidget(QLabel(self.tr_("channel_top_public_off")))
+        elif pub["count"] < 0:
+            lay.addWidget(QLabel(self.tr_("channel_top_public_na")))
+        else:
+            lay.addWidget(QLabel(str(pub["count"])), stretch=1)
+            if pub["count"] > 0:
+                btn = QPushButton(self.tr_("channel_top_show"))
+                btn.clicked.connect(
+                    lambda _=False, r=row: self._show_public(r))
+                lay.addWidget(btn)
+        return cell
+
+    def _show_public(self, row: dict) -> None:
+        pub = row.get("public") or {"items": []}
+        PublicForwardsDialog(self, self.i18n, row["id"], pub.get("items", [])).exec()
+
+    def _open_row(self, row: int, _col: int) -> None:
+        item = self.table.item(row, 1)
+        if item:
+            link = item.data(Qt.ItemDataRole.UserRole)
+            if link:
+                QDesktopServices.openUrl(QUrl(link))
+
+    # -------------------------------------------------------------- run
+    def collect_params(self) -> dict | None:
+        if not self.channel_edit.text().strip():
+            QMessageBox.warning(self, self.tr_("app_title"),
+                                self.tr_("channel_top_channel"))
+            return None
+        self.cfg.profile["CHANNEL_ID"] = self.channel_edit.text().strip()
+        self.cfg.save()
+        return {
+            "channel": self.channel_edit.text().strip(),
+            "top_n": self.top_spin.value(),
+            "period": self._current_period(),
+            "fetch_public": self.public_check.isChecked(),
+        }
+
+    def tool_func(self):
+        return run_channel_top
+
+    def on_done(self, ok: bool, msg: str) -> None:
+        if ok:
+            try:
+                data = json.loads(msg)
+                self._rows = data["rows"]
+                self._sort_col, self._sort_desc = 2, True
+                self._rebuild_table()
+                msg = self.tr_("channel_top_done",
+                               n=len(self._rows), scanned=data.get("scanned", 0))
+            except (ValueError, KeyError):
+                ok = False
+        super().on_done(ok, msg)

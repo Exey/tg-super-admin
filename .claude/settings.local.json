@@ -7,7 +7,17 @@
       "Bash(find / -name \"messageparse.py\" -path \"*telethon*\")",
       "Bash(pkill -9 -f \"PostImageReplacerTab\")",
       "Bash(pkill -9 -f \"QT_QPA_PLATFORM=offscreen python3\")",
-      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/Users/exey/tg-super-admin/app/ui/tool_tabs.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('/Users/exey/tg-super-admin/app/ui/tool_tabs.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python3 -m py_compile app/worker.py app/i18n.py app/ui/config_tab.py)",
+      "Bash(python3 -m py_compile app/tools/common.py)",
+      "Bash(.venv/bin/python -c \"import telethon; print\\(telethon.__version__\\)\")",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -m py_compile app/tools/channel_top.py app/ui/tool_tabs.py app/ui/main_window.py app/i18n.py)",
+      "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python -c ' *)",
+      "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python -c \"import app.ui.main_window; import app.tools.channel_top; print\\('imports OK'\\)\")",
+      "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python -c \"import app.ui.main_window\")",
+      "Bash(.venv/bin/python -m py_compile app/tools/channel_top.py app/ui/tool_tabs.py app/i18n.py)",
+      "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py)"
     ]
   }
 }

@@ -9,8 +9,8 @@ from ..config import Config, config_dir
 from ..i18n import I18n
 from .config_tab import ConfigTab
 from .tool_tabs import (
-    BackupTab, CleanerTab, PostImageReplacerTab, RepostGroupTab, RepostTab,
-    RestoreTab, UsersExtractorTab,
+    BackupTab, ChannelTopTab, CleanerTab, PostImageReplacerTab, RepostGroupTab,
+    RepostTab, RestoreTab, UsersExtractorTab,
 )
 
 
@@ -38,10 +38,12 @@ class MainWindow(QMainWindow):
         self.cleaner_tab = CleanerTab(self.cfg, self.i18n)
         self.users_extractor_tab = UsersExtractorTab(self.cfg, self.i18n)
         self.post_replacer_tab = PostImageReplacerTab(self.cfg, self.i18n)
+        self.channel_top_tab = ChannelTopTab(self.cfg, self.i18n)
 
         self.tool_tabs = [self.backup_tab, self.restore_tab, self.repost_tab,
                           self.repost_group_tab, self.cleaner_tab,
-                          self.users_extractor_tab, self.post_replacer_tab]
+                          self.users_extractor_tab, self.post_replacer_tab,
+                          self.channel_top_tab]
 
         self.tabs.addTab(self.config_tab, tr("tab_config"))
         self.tabs.addTab(self.backup_tab, tr("tab_backup"))
@@ -51,6 +53,7 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.cleaner_tab, tr("tab_cleaner"))
         self.tabs.addTab(self.users_extractor_tab, tr("tab_users_extractor"))
         self.tabs.addTab(self.post_replacer_tab, tr("tab_post_replacer"))
+        self.tabs.addTab(self.channel_top_tab, tr("tab_channel_top"))
 
         self.config_tab.profile_changed.connect(self._refresh_tab_defaults)
 
@@ -144,6 +147,7 @@ class MainWindow(QMainWindow):
         self.users_extractor_tab.group_b_edit.setText(
             self.cfg.get("USERS_EXTRACTOR_GROUP_B"))
         self.post_replacer_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
+        self.channel_top_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
 
     # -------------------------------------------------------------- close
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt naming)
