@@ -24,13 +24,15 @@ from .common import resolve_entity
 
 HEARTBEAT_EVERY = 500
 
-# Period-of-analysis choices offered in the GUI, in calendar days.
+# Period-of-analysis choices offered in the GUI, in calendar days. "all"
+# (and any other unrecognized/empty key) is intentionally absent here —
+# period_cutoff() already treats a missing key as "no limit".
 PERIOD_DAYS = {"3m": 90, "6m": 182, "1y": 365, "2y": 730, "3y": 1095}
 
 
 def period_cutoff(period: str) -> datetime | None:
-    """UTC cutoff for a period key, or None for an unrecognized/empty key
-    (meaning "no limit" — scan the whole channel)."""
+    """UTC cutoff for a period key, or None for "all" / an unrecognized or
+    empty key (meaning "no limit" — scan the whole channel)."""
     days = PERIOD_DAYS.get(period)
     return datetime.now(timezone.utc) - timedelta(days=days) if days else None
 
@@ -141,7 +143,8 @@ async def run_channel_top(client, p: dict, ctx) -> str:
             continue  # skip service messages (joins, pins, …)
 
         gid = getattr(msg, "grouped_id", None)
-        text = _preview(getattr(msg, "message", "") or "")
+        full_text = " ".join((getattr(msg, "message", "") or "").split())
+        text = _preview(full_text)
         views = int(getattr(msg, "views", 0) or 0)
         reactions = _reaction_total(msg)
         forwards = int(getattr(msg, "forwards", 0) or 0)
@@ -159,13 +162,15 @@ async def run_channel_top(client, p: dict, ctx) -> str:
             current["forwards"] = max(current["forwards"], forwards)
             if not current["text"] and text:
                 current["text"] = text
+                current["full_text"] = full_text
         else:
             current = {
                 "id": msg.id,
                 "ids": [msg.id],
                 "ts": int(msg.date.timestamp()) if msg.date else 0,
                 "date": msg.date.isoformat() if msg.date else "",
-                "text": text,
+                "text": text,          # short preview, for the on-screen table
+                "full_text": full_text,  # untruncated, for the Markdown export
                 "views": views,
                 "reactions": reactions,
                 "forwards": forwards,

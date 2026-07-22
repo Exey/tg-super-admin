@@ -240,6 +240,7 @@ EN = {
     "period_1y": "1 year",
     "period_2y": "2 years",
     "period_3y": "3 years",
+    "period_all": "All time",
     "channel_top_period_refresh": "Refresh post count for this period",
     "channel_top_counting": "Counting…",
     "channel_top_period_count": "{n} post(s) in this period",
@@ -268,6 +269,8 @@ EN = {
     "channel_top_report_private": "Top 7 {emoji} Reposts",
     "channel_top_report_views": "Top 7 {emoji} Views",
     "channel_top_report_reactions": "Top 7 {emoji} Reactions",
+    "channel_top_save_md_button": "💾 Save MD",
+    "channel_top_md_saved": "Saved: {path}",
 }
 
 RU = {
@@ -503,6 +506,7 @@ RU = {
     "period_1y": "1 год",
     "period_2y": "2 года",
     "period_3y": "3 года",
+    "period_all": "Всё время",
     "channel_top_period_refresh": "Обновить количество постов за период",
     "channel_top_counting": "Подсчёт…",
     "channel_top_period_count": "{n} пост(ов) за этот период",
@@ -531,6 +535,8 @@ RU = {
     "channel_top_report_private": "Топ 7 {emoji} Репостов",
     "channel_top_report_views": "Топ 7 {emoji} Просмотров",
     "channel_top_report_reactions": "Топ 7 {emoji} Реакций",
+    "channel_top_save_md_button": "💾 Сохранить MD",
+    "channel_top_md_saved": "Сохранено: {path}",
 }
 
 LANGS = {"en": EN, "ru": RU}

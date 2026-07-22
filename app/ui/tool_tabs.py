@@ -1279,22 +1279,21 @@ class ChannelTopTab(ToolTab):
         self.top_spin.setValue(20)
         self.form.addRow(self.tr_("channel_top_n"), self.top_spin)
 
-        self._period_keys = ["3m", "6m", "1y", "2y", "3y"]
+        self._period_keys = ["3m", "6m", "1y", "2y", "3y", "all"]
         period_row = QWidget()
         period_lay = QHBoxLayout(period_row)
         period_lay.setContentsMargins(0, 0, 0, 0)
         self.period_combo = QComboBox()
         self.period_combo.addItems([
             self.tr_("period_3m"), self.tr_("period_6m"), self.tr_("period_1y"),
-            self.tr_("period_2y"), self.tr_("period_3y"),
+            self.tr_("period_2y"), self.tr_("period_3y"), self.tr_("period_all"),
         ])
         self.period_combo.currentIndexChanged.connect(self._on_period_changed)
         period_lay.addWidget(self.period_combo, stretch=1)
         self.period_count_label = QLabel("")
         self.period_count_label.setStyleSheet("color: palette(placeholder-text);")
         period_lay.addWidget(self.period_count_label)
-        refresh_btn = QPushButton("🔄")
-        refresh_btn.setFixedWidth(32)
+        refresh_btn = QPushButton(" 🔄 ")
         refresh_btn.setToolTip(self.tr_("channel_top_period_refresh"))
         refresh_btn.clicked.connect(self._count_period)
         period_lay.addWidget(refresh_btn)
@@ -1329,8 +1328,13 @@ class ChannelTopTab(ToolTab):
         self.report_btn.clicked.connect(self._show_report)
         layout.addWidget(self.report_btn)
 
+        self.save_md_btn = QPushButton(self.tr_("channel_top_save_md_button"))
+        self.save_md_btn.clicked.connect(self._save_md)
+        layout.addWidget(self.save_md_btn)
+
     def set_extra_buttons_enabled(self, enabled: bool) -> None:
         self.report_btn.setEnabled(enabled)
+        self.save_md_btn.setEnabled(enabled)
 
     # -------------------------------------------------------------- period
     def _current_period(self) -> str:
@@ -1419,6 +1423,14 @@ class ChannelTopTab(ToolTab):
             return ""
         try:
             return datetime.fromisoformat(iso).astimezone().strftime("%Y-%m-%d")
+        except ValueError:
+            return iso
+
+    def _fmt_datetime(self, iso: str) -> str:
+        if not iso:
+            return ""
+        try:
+            return datetime.fromisoformat(iso).astimezone().strftime("%Y-%m-%d %H:%M")
         except ValueError:
             return iso
 
@@ -1515,3 +1527,77 @@ class ChannelTopTab(ToolTab):
             lines.append("")
             lines.append("")
         return "\n".join(lines).rstrip("\n") + "\n"
+
+    # ------------------------------------------------------------- save md
+    def _public_text(self, row: dict) -> str:
+        """Plain count for the on-screen cell label (see _public_cell)."""
+        pub = row.get("public")
+        if pub is None:
+            return self.tr_("channel_top_public_off")
+        if pub["count"] < 0:
+            return self.tr_("channel_top_public_na")
+        return str(pub["count"])
+
+    def _public_md(self, row: dict) -> str:
+        """Count plus a link per public repost, for the Markdown table cell —
+        each `[channel title](link)`, stacked with <br> inside the cell."""
+        pub = row.get("public")
+        if pub is None:
+            return self.tr_("channel_top_public_off")
+        if pub["count"] < 0:
+            return self.tr_("channel_top_public_na")
+        items = pub.get("items") or []
+        if not items:
+            return str(pub["count"])
+        links = []
+        for it in items:
+            title = " ".join((it.get("title") or "?").split())
+            title = title.replace("|", "\\|").replace("[", "(").replace("]", ")")
+            link = it.get("link") or ""
+            links.append(f"[{title}]({link})" if link else title)
+        return f"{pub['count']} " + "<br>".join(links)
+
+    def _save_md(self) -> None:
+        if not self._rows:
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("channel_top_report_empty"))
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, self.tr_("channel_top_save_md_button"), "channel_top.md",
+            "Markdown (*.md)")
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._build_md_table())
+        except OSError as exc:
+            QMessageBox.warning(self, self.tr_("app_title"), str(exc))
+            return
+        self.append_log(self.tr_("channel_top_md_saved", path=path))
+
+    def _build_md_table(self) -> str:
+        channel_text = self.channel_edit.text().strip()
+        title = self._title or channel_text
+        rows = sorted(self._rows, key=lambda r: self._sort_value(r, self._sort_col),
+                      reverse=self._sort_desc)
+
+        lines = [f"# {self.tr_('channel_top_report_title', title=title)}", ""]
+        headers = [
+            self.tr_("channel_top_col_date"), self.tr_("channel_top_col_post"),
+            self.tr_("channel_top_col_views"), self.tr_("channel_top_col_reactions"),
+            self.tr_("channel_top_col_private"), self.tr_("channel_top_col_public"),
+        ]
+        lines.append("| " + " | ".join(headers) + " |")
+        lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
+
+        for r in rows:
+            link = build_post_link(channel_text, r["id"])
+            text = (r.get("full_text") or r.get("text") or f"#{r['id']}")
+            text = text.replace("|", "\\|").replace("\n", " ").strip() or f"#{r['id']}"
+            date = self._fmt_datetime(r.get("date", ""))
+            lines.append(
+                f"| {date} | [{text}]({link}) | {r.get('views', 0)} | "
+                f"{r.get('reactions', 0)} | {r.get('forwards', 0)} | "
+                f"{self._public_md(r)} |"
+            )
+        return "\n".join(lines) + "\n"
