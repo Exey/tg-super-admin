@@ -12,7 +12,6 @@ EN = {
     "tab_cleaner": "🧹 Cleaner",
     "tab_users_extractor": "🧮 Users diff",
     "tab_post_replacer": "🖼 Post replacer",
-    "tab_channel_top": "🏆 Channel top",
     # generic
     "run": "▶ Run",
     "stop": "⏹ Stop",
@@ -224,53 +223,6 @@ EN = {
     "post_replacer_no_rows": "Load posts first, then set at least one new "
                             "image or new text on a row.",
     "post_replacer_bad_image": "Image file not found: {path}",
-    # channel top
-    "channel_top_help": "Ranks a channel's posts by engagement within a chosen "
-                        "period. Scans every post in range for views, reactions "
-                        "and forwards (private reposts), then lists the best "
-                        "ones — click any column header to sort. Public "
-                        "reposts (which public channels shared a post) are "
-                        "fetched only for the leaders and need a channel whose "
-                        "statistics you can view.",
-    "channel_top_channel": "Channel ID or @username",
-    "channel_top_n": "Keep top N per metric",
-    "channel_top_period": "Period of analysis",
-    "period_3m": "3 months",
-    "period_6m": "6 months",
-    "period_1y": "1 year",
-    "period_2y": "2 years",
-    "period_3y": "3 years",
-    "period_all": "All time",
-    "channel_top_period_refresh": "Refresh post count for this period",
-    "channel_top_counting": "Counting…",
-    "channel_top_period_count": "{n} post(s) in this period",
-    "channel_top_fetch_public": "Fetch public reposts (slower, needs stats access)",
-    "channel_top_col_date": "Date",
-    "channel_top_col_post": "Post",
-    "channel_top_col_views": "Views",
-    "channel_top_col_reactions": "Reactions",
-    "channel_top_col_private": "Private reposts",
-    "channel_top_col_public": "Public reposts",
-    "channel_top_album_suffix": "  ·  album ({n} items)",
-    "channel_top_show": "Show",
-    "channel_top_public_na": "n/a",
-    "channel_top_public_off": "—",
-    "channel_top_done": "Ranked {n} top post(s) out of {scanned} scanned.",
-    "channel_top_public_title": "Public reposts of post #{id}",
-    "channel_top_public_empty": "No public reposts found for this post.",
-    "channel_top_public_col_channel": "Channel",
-    "channel_top_public_col_views": "Views",
-    "channel_top_public_col_link": "Link",
-    "channel_top_report_button": "📊 Analytics report",
-    "channel_top_report_empty": "Run the scan first — no posts loaded yet.",
-    "channel_top_report_dialog_title": "Analytics report",
-    "channel_top_report_copy": "📋 Copy to clipboard",
-    "channel_top_report_title": "Analytics of channel {title}",
-    "channel_top_report_private": "Top 7 {emoji} Reposts",
-    "channel_top_report_views": "Top 7 {emoji} Views",
-    "channel_top_report_reactions": "Top 7 {emoji} Reactions",
-    "channel_top_save_md_button": "💾 Save MD",
-    "channel_top_md_saved": "Saved: {path}",
 }
 
 RU = {
@@ -283,7 +235,6 @@ RU = {
     "tab_cleaner": "🧹 Очистка",
     "tab_users_extractor": "🧮 Разница юзеров",
     "tab_post_replacer": "🖼 Замена в постах",
-    "tab_channel_top": "🏆 Топ канала",
     "run": "▶ Запустить",
     "stop": "⏹ Остановить",
     "browse": "Обзор…",
@@ -489,54 +440,6 @@ RU = {
     "post_replacer_no_rows": "Сначала загрузите посты, затем задайте картинку "
                              "или текст хотя бы в одной строке.",
     "post_replacer_bad_image": "Файл картинки не найден: {path}",
-    # channel top
-    "channel_top_help": "Ранжирует посты канала по вовлечённости за выбранный "
-                        "период. Сканирует все посты в этом диапазоне — "
-                        "просмотры, реакции и репосты (личные пересылки), — "
-                        "затем показывает лучшие. Кликните по заголовку "
-                        "столбца для сортировки. Публичные репосты (какие "
-                        "публичные каналы поделились постом) запрашиваются "
-                        "только для лидеров и требуют канала, статистику "
-                        "которого вы можете смотреть.",
-    "channel_top_channel": "ID канала или @username",
-    "channel_top_n": "Оставить топ-N по каждой метрике",
-    "channel_top_period": "Период анализа",
-    "period_3m": "3 месяца",
-    "period_6m": "6 месяцев",
-    "period_1y": "1 год",
-    "period_2y": "2 года",
-    "period_3y": "3 года",
-    "period_all": "Всё время",
-    "channel_top_period_refresh": "Обновить количество постов за период",
-    "channel_top_counting": "Подсчёт…",
-    "channel_top_period_count": "{n} пост(ов) за этот период",
-    "channel_top_fetch_public": "Запросить публичные репосты (медленнее, нужен доступ к статистике)",
-    "channel_top_col_date": "Дата",
-    "channel_top_col_post": "Пост",
-    "channel_top_col_views": "Просмотры",
-    "channel_top_col_reactions": "Реакции",
-    "channel_top_col_private": "Личные репосты",
-    "channel_top_col_public": "Публичные репосты",
-    "channel_top_album_suffix": "  ·  альбом ({n} элементов)",
-    "channel_top_show": "Показать",
-    "channel_top_public_na": "н/д",
-    "channel_top_public_off": "—",
-    "channel_top_done": "Отобрано {n} лучших постов из {scanned} просканированных.",
-    "channel_top_public_title": "Публичные репосты поста #{id}",
-    "channel_top_public_empty": "Публичных репостов этого поста не найдено.",
-    "channel_top_public_col_channel": "Канал",
-    "channel_top_public_col_views": "Просмотры",
-    "channel_top_public_col_link": "Ссылка",
-    "channel_top_report_button": "📊 Аналитический отчёт",
-    "channel_top_report_empty": "Сначала запустите сканирование — посты ещё не загружены.",
-    "channel_top_report_dialog_title": "Аналитический отчёт",
-    "channel_top_report_copy": "📋 Скопировать",
-    "channel_top_report_title": "Аналитика канала {title}",
-    "channel_top_report_private": "Топ 7 {emoji} Репостов",
-    "channel_top_report_views": "Топ 7 {emoji} Просмотров",
-    "channel_top_report_reactions": "Топ 7 {emoji} Реакций",
-    "channel_top_save_md_button": "💾 Сохранить MD",
-    "channel_top_md_saved": "Сохранено: {path}",
 }
 
 LANGS = {"en": EN, "ru": RU}
