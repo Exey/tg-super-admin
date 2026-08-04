@@ -232,16 +232,21 @@ EN = {
                           "lists the ones not already tracked in a known-"
                           "links .md file, matched by @username or by the "
                           "channel's numeric ID, whichever the file has. "
-                          "Only real, resolvable channels are kept (personal "
-                          "profiles, bots, groups and invite links are "
-                          "dropped); each one's live subscriber count is "
-                          "fetched and can be filtered with a minimum. "
                           "\"tag\" is the hyperlink's own label, or the text "
                           "right before the link (same line, or the line "
-                          "above it).",
+                          "above it). \"Fetch follower counts\" (off by "
+                          "default) resolves each link to verify it's a real "
+                          "channel and get its live subscriber count — "
+                          "Telegram flood-bans this method hard if it's "
+                          "called too fast, so leave the delay as-is unless "
+                          "you've tested a shorter one.",
     "links_compare_md": "Known-links .md file (optional — leave empty to extract every channel link)",
     "links_compare_channel": "Channel to scan for links",
     "links_compare_scan_limit": "Scan at most N posts (0 = all)",
+    "links_compare_fetch_followers": "Fetch follower counts (resolves + verifies "
+                                     "each link — slow, and Telegram flood-bans "
+                                     "aggressively; off = fast list of raw links)",
+    "links_compare_delay": "Delay between follower lookups (s)",
     "links_compare_min_followers": "Min followers (0 = no minimum)",
     "links_compare_col_followers": "Followers",
     "links_compare_col_link": "t.me/ link",
@@ -479,16 +484,23 @@ RU = {
                           "показывает те, которых ещё нет в известном "
                           ".md-файле (совпадение по @username или по "
                           "числовому ID, смотря что есть в файле). "
-                          "Остаются только реальные, разрешимые каналы "
-                          "(личные профили, боты, группы и инвайт-ссылки "
-                          "отбрасываются); для каждого запрашивается текущее "
-                          "число подписчиков, которое можно отфильтровать по "
-                          "минимуму. «tag» — это подпись самой гиперссылки, "
-                          "либо текст перед ссылкой (в той же строке или "
-                          "строкой выше).",
+                          "«tag» — это подпись самой гиперссылки, либо текст "
+                          "перед ссылкой (в той же строке или строкой выше). "
+                          "«Запрашивать число подписчиков» (по умолчанию "
+                          "выкл.) резолвит каждую ссылку, чтобы проверить, "
+                          "что это реальный канал, и получить текущее число "
+                          "подписчиков — Telegram жёстко банит за флуд по "
+                          "этому методу при слишком частых запросах, так что "
+                          "не уменьшайте задержку, пока не проверите на "
+                          "практике, что это безопасно.",
     "links_compare_md": "Файл .md с известными ссылками (необязательно — оставьте пустым, чтобы извлечь все ссылки на каналы)",
     "links_compare_channel": "Канал для сканирования ссылок",
     "links_compare_scan_limit": "Сканировать не более N постов (0 = все)",
+    "links_compare_fetch_followers": "Запрашивать число подписчиков (проверяет и "
+                                     "резолвит каждую ссылку — медленно, Telegram "
+                                     "агрессивно банит за флуд; выкл. = быстрый "
+                                     "список ссылок без проверки)",
+    "links_compare_delay": "Задержка между запросами подписчиков (с)",
     "links_compare_min_followers": "Мин. подписчиков (0 = без ограничения)",
     "links_compare_col_followers": "Подписчики",
     "links_compare_col_link": "t.me/ ссылка",

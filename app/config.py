@@ -27,6 +27,8 @@ FIELDS = [
     "LINKS_COMPARE_MD_PATH",  # links compare: known-links .md file
     "LINKS_COMPARE_CHANNEL",  # links compare: channel to scan for new links
     "LINKS_COMPARE_MIN_FOLLOWERS",  # links compare: minimum follower count to report
+    "LINKS_COMPARE_FETCH_FOLLOWERS",  # links compare: "1" to resolve/verify + fetch counts
+    "LINKS_COMPARE_DELAY",  # links compare: seconds between each follower lookup
 ]
 
 # Only these are shown on the Config tab; the rest live on their tool tabs.

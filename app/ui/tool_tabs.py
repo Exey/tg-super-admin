@@ -1204,6 +1204,22 @@ class LinksCompareTab(ToolTab):
         self.scan_spin.setRange(0, MAX_ID)
         self.form.addRow(self.tr_("links_compare_scan_limit"), self.scan_spin)
 
+        self.fetch_followers_check = QCheckBox(self.tr_("links_compare_fetch_followers"))
+        self.fetch_followers_check.setChecked(
+            self.cfg.get("LINKS_COMPARE_FETCH_FOLLOWERS") == "1")
+        self.fetch_followers_check.toggled.connect(self._on_fetch_followers_toggled)
+        self.form.addRow("", self.fetch_followers_check)
+
+        self.delay_spin = QDoubleSpinBox()
+        self.delay_spin.setRange(0.5, 30.0)
+        self.delay_spin.setSingleStep(0.5)
+        try:
+            self.delay_spin.setValue(
+                float(self.cfg.get("LINKS_COMPARE_DELAY") or 2.0))
+        except ValueError:
+            self.delay_spin.setValue(2.0)
+        self.form.addRow(self.tr_("links_compare_delay"), self.delay_spin)
+
         self.min_followers_spin = QSpinBox()
         self.min_followers_spin.setRange(0, 100_000_000)
         try:
@@ -1212,6 +1228,7 @@ class LinksCompareTab(ToolTab):
         except ValueError:
             pass
         self.form.addRow(self.tr_("links_compare_min_followers"), self.min_followers_spin)
+        self._on_fetch_followers_toggled(self.fetch_followers_check.isChecked())
 
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([
@@ -1236,6 +1253,10 @@ class LinksCompareTab(ToolTab):
 
     def set_extra_buttons_enabled(self, enabled: bool) -> None:
         self.save_md_btn.setEnabled(enabled)
+
+    def _on_fetch_followers_toggled(self, checked: bool) -> None:
+        self.delay_spin.setEnabled(checked)
+        self.min_followers_spin.setEnabled(checked)
 
     def _open_row(self, row: int, col: int) -> None:
         if col != 1:
@@ -1271,12 +1292,17 @@ class LinksCompareTab(ToolTab):
         self.cfg.profile["LINKS_COMPARE_MD_PATH"] = md_path
         self.cfg.profile["LINKS_COMPARE_CHANNEL"] = channel
         self.cfg.profile["LINKS_COMPARE_MIN_FOLLOWERS"] = str(self.min_followers_spin.value())
+        self.cfg.profile["LINKS_COMPARE_FETCH_FOLLOWERS"] = (
+            "1" if self.fetch_followers_check.isChecked() else "0")
+        self.cfg.profile["LINKS_COMPARE_DELAY"] = str(self.delay_spin.value())
         self.cfg.save()
         return {
             "channel": channel,
             "md_path": md_path,
             "scan_limit": self.scan_spin.value(),
             "min_followers": self.min_followers_spin.value(),
+            "fetch_followers": self.fetch_followers_check.isChecked(),
+            "delay": self.delay_spin.value(),
         }
 
     def tool_func(self):

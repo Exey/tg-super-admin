@@ -32,6 +32,7 @@ as "new" if:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from pathlib import Path
@@ -208,7 +209,10 @@ async def _resolve_link_info(client, ctx, norm_link: str, kind: str) -> dict | N
 
 async def compare_links(client, p: dict, ctx) -> str:
     """p: channel, md_path (optional — '' means no known-links filter),
-    scan_limit (0 = all), min_followers (0 = no minimum)"""
+    scan_limit (0 = all), min_followers (0 = no minimum), fetch_followers
+    (bool — resolve each candidate for its subscriber count/channel-type/
+    numeric-ID check; this is the expensive, flood-prone part), delay
+    (seconds to wait between each of those lookups)."""
     md_path = p.get("md_path") or ""
     if md_path:
         known_usernames, known_ids = parse_md_known(md_path)
@@ -253,13 +257,34 @@ async def compare_links(client, p: dict, ctx) -> str:
         if not (info["kind"] == "user"
                 and norm.split("t.me/", 1)[-1] in known_usernames)
     }
-    ctx.log(f"{len(candidates)} link(s) not matched by username — "
-            f"checking numeric IDs / fetching follower counts…")
+    items = sorted(candidates.items())
+
+    fetch_followers = bool(p.get("fetch_followers"))
+    if not fetch_followers:
+        # Fast path: no per-link API calls at all, so no flood risk — just
+        # report what the scan found, unresolved. Numeric-ID matches and the
+        # channel-only/min-followers filters need a resolved entity, so they
+        # don't apply here.
+        ctx.log(f"{len(items)} link(s) not matched by username (follower "
+                f"lookup skipped — enable it to verify + get counts).")
+        rows = [{"link": norm, "tag": info["tag"], "followers": None}
+               for norm, info in items]
+        return json.dumps({
+            "cancelled": ctx.cancelled(),
+            "title": title,
+            "known": len(known_usernames) + len(known_ids),
+            "scanned_links": len(found),
+            "rows": rows,
+        })
+
+    delay = float(p.get("delay") or 0)
+    ctx.log(f"{len(items)} link(s) not matched by username — checking "
+            f"numeric IDs / fetching follower counts "
+            f"({delay}s between each to avoid a flood ban)…")
 
     min_followers = int(p.get("min_followers") or 0)
     rows: list[dict] = []
     skipped_not_channel = 0
-    items = sorted(candidates.items())
     for i, (norm, info) in enumerate(items, 1):
         if ctx.cancelled():
             break
@@ -271,6 +296,8 @@ async def compare_links(client, p: dict, ctx) -> str:
             if followers is not None and followers >= min_followers:
                 rows.append({"link": norm, "tag": info["tag"], "followers": followers})
         ctx.progress(i, len(items))
+        if delay and i < len(items):
+            await asyncio.sleep(delay)
 
     if skipped_not_channel:
         ctx.log(f"  Skipped {skipped_not_channel} link(s) that aren't a "
