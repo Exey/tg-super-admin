@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from ..tools.backup import run_backup
 from ..tools.cleaner import run_cleaner, scan_keep_candidates
 from ..tools.common import reset_progress
+from ..tools.links_compare import compare_links
 from ..tools.post_image_replacer import run_post_image_replace
 from ..tools.repost import run_repost
 from ..tools.repost_group import count_repost_group, run_repost_group
@@ -86,6 +87,27 @@ def _image_file_row(parent, line_edit: QLineEdit, browse_text: str) -> QWidget:
     def pick() -> None:
         path, _ = QFileDialog.getOpenFileName(parent, browse_text,
                                               line_edit.text() or "", IMAGE_FILTER)
+        if path:
+            line_edit.setText(path)
+
+    btn.clicked.connect(pick)
+    lay.addWidget(btn)
+    return row
+
+
+MD_FILTER = "Markdown (*.md);;All files (*)"
+
+
+def _md_file_row(parent, line_edit: QLineEdit, browse_text: str) -> QWidget:
+    row = QWidget(parent)
+    lay = QHBoxLayout(row)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.addWidget(line_edit, stretch=1)
+    btn = QPushButton(browse_text)
+
+    def pick() -> None:
+        path, _ = QFileDialog.getOpenFileName(parent, browse_text,
+                                              line_edit.text() or "", MD_FILTER)
         if path:
             line_edit.setText(path)
 
@@ -1158,4 +1180,147 @@ class PostImageReplacerTab(ToolTab):
 
     def tool_func(self):
         return run_post_image_replace
+
+
+# ============================================================ Links compare
+
+class LinksCompareTab(ToolTab):
+    tool_name = "links_compare"
+
+    def help_text(self) -> str:
+        return self.tr_("links_compare_help")
+
+    def build_form(self) -> None:
+        self._rows: list[dict] = []
+
+        self.md_edit = QLineEdit(self.cfg.get("LINKS_COMPARE_MD_PATH"))
+        self.form.addRow(self.tr_("links_compare_md"),
+                         _md_file_row(self, self.md_edit, self.tr_("browse")))
+
+        self.channel_edit = QLineEdit(self.cfg.get("LINKS_COMPARE_CHANNEL"))
+        self.form.addRow(self.tr_("links_compare_channel"), self.channel_edit)
+
+        self.scan_spin = QSpinBox()
+        self.scan_spin.setRange(0, MAX_ID)
+        self.form.addRow(self.tr_("links_compare_scan_limit"), self.scan_spin)
+
+        self.min_followers_spin = QSpinBox()
+        self.min_followers_spin.setRange(0, 100_000_000)
+        try:
+            self.min_followers_spin.setValue(
+                int(self.cfg.get("LINKS_COMPARE_MIN_FOLLOWERS") or 0))
+        except ValueError:
+            pass
+        self.form.addRow(self.tr_("links_compare_min_followers"), self.min_followers_spin)
+
+        self.table = QTableWidget(0, 3)
+        self.table.setHorizontalHeaderLabels([
+            self.tr_("links_compare_col_followers"),
+            self.tr_("links_compare_col_link"),
+            self.tr_("links_compare_col_tag"),
+        ])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.Stretch)
+        self.table.cellDoubleClicked.connect(self._open_row)
+        self.table.setMinimumHeight(260)
+        # Added to the tab root (not the form row) so it grows on resize.
+        self.layout().addWidget(self.table, stretch=1)
+
+    def extra_buttons(self, layout) -> None:
+        self.save_md_btn = QPushButton(self.tr_("links_compare_save_md_button"))
+        self.save_md_btn.clicked.connect(self._save_md)
+        layout.addWidget(self.save_md_btn)
+
+    def set_extra_buttons_enabled(self, enabled: bool) -> None:
+        self.save_md_btn.setEnabled(enabled)
+
+    def _open_row(self, row: int, col: int) -> None:
+        if col != 1:
+            return
+        item = self.table.item(row, 1)
+        if item and item.text():
+            QDesktopServices.openUrl(QUrl(f"https://{item.text()}"))
+
+    def _rebuild_table(self) -> None:
+        self.table.setRowCount(len(self._rows))
+        for i, r in enumerate(self._rows):
+            followers = r.get("followers")
+            followers_text = (str(followers) if followers is not None
+                              else self.tr_("links_compare_na"))
+            self.table.setItem(i, 0, QTableWidgetItem(followers_text))
+            link_item = QTableWidgetItem(r.get("link", ""))
+            link_item.setToolTip(f"https://{r.get('link', '')}")
+            self.table.setItem(i, 1, link_item)
+            self.table.setItem(i, 2, QTableWidgetItem(r.get("tag", "")))
+
+    # -------------------------------------------------------------- run
+    def collect_params(self) -> dict | None:
+        md_path = self.md_edit.text().strip()
+        channel = self.channel_edit.text().strip()
+        if not md_path or not os.path.isfile(md_path):
+            QMessageBox.warning(self, self.tr_("app_title"),
+                                self.tr_("links_compare_bad_md"))
+            return None
+        if not channel:
+            QMessageBox.warning(self, self.tr_("app_title"),
+                                self.tr_("links_compare_channel"))
+            return None
+        self.cfg.profile["LINKS_COMPARE_MD_PATH"] = md_path
+        self.cfg.profile["LINKS_COMPARE_CHANNEL"] = channel
+        self.cfg.profile["LINKS_COMPARE_MIN_FOLLOWERS"] = str(self.min_followers_spin.value())
+        self.cfg.save()
+        return {
+            "channel": channel,
+            "md_path": md_path,
+            "scan_limit": self.scan_spin.value(),
+            "min_followers": self.min_followers_spin.value(),
+        }
+
+    def tool_func(self):
+        return compare_links
+
+    def on_done(self, ok: bool, msg: str) -> None:
+        if ok:
+            try:
+                data = json.loads(msg)
+                self._rows = data["rows"]
+                self._rebuild_table()
+                msg = self.tr_("links_compare_done", n=len(self._rows),
+                               known=data.get("known", 0),
+                               scanned=data.get("scanned_links", 0))
+            except (ValueError, KeyError):
+                ok = False
+        super().on_done(ok, msg)
+
+    # ------------------------------------------------------------- save md
+    def _save_md(self) -> None:
+        if not self._rows:
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("links_compare_empty"))
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, self.tr_("links_compare_save_md_button"), "new_links.md",
+            "Markdown (*.md)")
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._build_md_table())
+        except OSError as exc:
+            QMessageBox.warning(self, self.tr_("app_title"), str(exc))
+            return
+        self.append_log(self.tr_("links_compare_md_saved", path=path))
+
+    def _build_md_table(self) -> str:
+        lines = ["|Followers|t.me/ link|tag|", "|---|---|---|"]
+        for r in self._rows:
+            followers = r.get("followers")
+            followers_text = str(followers) if followers is not None else ""
+            link = (r.get("link") or "").replace("|", "\\|")
+            tag = (r.get("tag") or "").replace("|", "\\|").replace("\n", " ").strip()
+            lines.append(f"|{followers_text}|{link}|{tag}|")
+        return "\n".join(lines) + "\n"
 

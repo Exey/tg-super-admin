@@ -12,6 +12,7 @@ EN = {
     "tab_cleaner": "🧹 Cleaner",
     "tab_users_extractor": "🧮 Users diff",
     "tab_post_replacer": "🖼 Post replacer",
+    "tab_links_compare": "🔗 Links compare",
     # generic
     "run": "▶ Run",
     "stop": "⏹ Stop",
@@ -223,6 +224,35 @@ EN = {
     "post_replacer_no_rows": "Load posts first, then set at least one new "
                             "image or new text on a row.",
     "post_replacer_bad_image": "Image file not found: {path}",
+    # links compare
+    "links_compare_help": "Scans a channel for other channels it mentions — "
+                          "plain t.me/ links, bare @usernames, or a category "
+                          "hyperlinked straight to the channel (e.g. a "
+                          "\"recommended channels\" directory post) — and "
+                          "lists the ones not already tracked in a known-"
+                          "links .md file, matched by @username or by the "
+                          "channel's numeric ID, whichever the file has. "
+                          "Only real, resolvable channels are kept (personal "
+                          "profiles, bots, groups and invite links are "
+                          "dropped); each one's live subscriber count is "
+                          "fetched and can be filtered with a minimum. "
+                          "\"tag\" is the hyperlink's own label, or the text "
+                          "right before the link (same line, or the line "
+                          "above it).",
+    "links_compare_md": "Known-links .md file",
+    "links_compare_channel": "Channel to scan for links",
+    "links_compare_scan_limit": "Scan at most N posts (0 = all)",
+    "links_compare_min_followers": "Min followers (0 = no minimum)",
+    "links_compare_col_followers": "Followers",
+    "links_compare_col_link": "t.me/ link",
+    "links_compare_col_tag": "Tag",
+    "links_compare_na": "n/a",
+    "links_compare_bad_md": "Pick a valid known-links .md file first.",
+    "links_compare_save_md_button": "💾 Save MD",
+    "links_compare_empty": "Run the scan first — no new links found yet.",
+    "links_compare_md_saved": "Saved: {path}",
+    "links_compare_done": "{n} new link(s) — {scanned} found in the channel, "
+                          "{known} already known.",
 }
 
 RU = {
@@ -235,6 +265,7 @@ RU = {
     "tab_cleaner": "🧹 Очистка",
     "tab_users_extractor": "🧮 Разница юзеров",
     "tab_post_replacer": "🖼 Замена в постах",
+    "tab_links_compare": "🔗 Сравнение ссылок",
     "run": "▶ Запустить",
     "stop": "⏹ Остановить",
     "browse": "Обзор…",
@@ -440,6 +471,35 @@ RU = {
     "post_replacer_no_rows": "Сначала загрузите посты, затем задайте картинку "
                              "или текст хотя бы в одной строке.",
     "post_replacer_bad_image": "Файл картинки не найден: {path}",
+    # links compare
+    "links_compare_help": "Сканирует канал на упоминания других каналов — "
+                          "обычные t.me/ ссылки, голые @username или текст, "
+                          "гиперссылкой ведущий прямо на канал (например, "
+                          "пост-подборку «рекомендуемые каналы») — и "
+                          "показывает те, которых ещё нет в известном "
+                          ".md-файле (совпадение по @username или по "
+                          "числовому ID, смотря что есть в файле). "
+                          "Остаются только реальные, разрешимые каналы "
+                          "(личные профили, боты, группы и инвайт-ссылки "
+                          "отбрасываются); для каждого запрашивается текущее "
+                          "число подписчиков, которое можно отфильтровать по "
+                          "минимуму. «tag» — это подпись самой гиперссылки, "
+                          "либо текст перед ссылкой (в той же строке или "
+                          "строкой выше).",
+    "links_compare_md": "Файл .md с известными ссылками",
+    "links_compare_channel": "Канал для сканирования ссылок",
+    "links_compare_scan_limit": "Сканировать не более N постов (0 = все)",
+    "links_compare_min_followers": "Мин. подписчиков (0 = без ограничения)",
+    "links_compare_col_followers": "Подписчики",
+    "links_compare_col_link": "t.me/ ссылка",
+    "links_compare_col_tag": "Тег",
+    "links_compare_na": "н/д",
+    "links_compare_bad_md": "Сначала выберите корректный .md-файл с известными ссылками.",
+    "links_compare_save_md_button": "💾 Сохранить MD",
+    "links_compare_empty": "Сначала запустите сканирование — новых ссылок пока нет.",
+    "links_compare_md_saved": "Сохранено: {path}",
+    "links_compare_done": "{n} новых ссылок — найдено {scanned} в канале, "
+                          "{known} уже известны.",
 }
 
 LANGS = {"en": EN, "ru": RU}
