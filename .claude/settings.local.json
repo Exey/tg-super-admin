@@ -21,7 +21,9 @@
       "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py app/i18n.py)",
       "Bash(kill -9 27673)",
       "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py app/i18n.py app/tools/channel_top.py)",
-      "Bash(.venv/bin/python -m py_compile app/i18n.py app/ui/tool_tabs.py app/ui/main_window.py)"
+      "Bash(.venv/bin/python -m py_compile app/i18n.py app/ui/tool_tabs.py app/ui/main_window.py)",
+      "Bash(.venv/bin/python -m py_compile app/i18n.py app/ui/tool_tabs.py)",
+      "Bash(.venv/bin/python -m py_compile app/tools/links_compare.py app/ui/tool_tabs.py app/i18n.py)"
     ]
   }
 }

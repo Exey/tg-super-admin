@@ -1182,7 +1182,7 @@ class PostImageReplacerTab(ToolTab):
         return run_post_image_replace
 
 
-# ============================================================ Links compare
+# ============================================================ Links extract
 
 class LinksCompareTab(ToolTab):
     tool_name = "links_compare"
@@ -1260,7 +1260,7 @@ class LinksCompareTab(ToolTab):
     def collect_params(self) -> dict | None:
         md_path = self.md_edit.text().strip()
         channel = self.channel_edit.text().strip()
-        if not md_path or not os.path.isfile(md_path):
+        if md_path and not os.path.isfile(md_path):
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("links_compare_bad_md"))
             return None

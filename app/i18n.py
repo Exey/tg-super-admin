@@ -12,7 +12,7 @@ EN = {
     "tab_cleaner": "🧹 Cleaner",
     "tab_users_extractor": "🧮 Users diff",
     "tab_post_replacer": "🖼 Post replacer",
-    "tab_links_compare": "🔗 Links compare",
+    "tab_links_compare": "🔗 Links extract",
     # generic
     "run": "▶ Run",
     "stop": "⏹ Stop",
@@ -239,7 +239,7 @@ EN = {
                           "\"tag\" is the hyperlink's own label, or the text "
                           "right before the link (same line, or the line "
                           "above it).",
-    "links_compare_md": "Known-links .md file",
+    "links_compare_md": "Known-links .md file (optional — leave empty to extract every channel link)",
     "links_compare_channel": "Channel to scan for links",
     "links_compare_scan_limit": "Scan at most N posts (0 = all)",
     "links_compare_min_followers": "Min followers (0 = no minimum)",
@@ -247,7 +247,7 @@ EN = {
     "links_compare_col_link": "t.me/ link",
     "links_compare_col_tag": "Tag",
     "links_compare_na": "n/a",
-    "links_compare_bad_md": "Pick a valid known-links .md file first.",
+    "links_compare_bad_md": "That .md file path doesn't exist — fix it, or clear the field to skip the known-links filter.",
     "links_compare_save_md_button": "💾 Save MD",
     "links_compare_empty": "Run the scan first — no new links found yet.",
     "links_compare_md_saved": "Saved: {path}",
@@ -265,7 +265,7 @@ RU = {
     "tab_cleaner": "🧹 Очистка",
     "tab_users_extractor": "🧮 Разница юзеров",
     "tab_post_replacer": "🖼 Замена в постах",
-    "tab_links_compare": "🔗 Сравнение ссылок",
+    "tab_links_compare": "🔗 Извлечение ссылок",
     "run": "▶ Запустить",
     "stop": "⏹ Остановить",
     "browse": "Обзор…",
@@ -486,7 +486,7 @@ RU = {
                           "минимуму. «tag» — это подпись самой гиперссылки, "
                           "либо текст перед ссылкой (в той же строке или "
                           "строкой выше).",
-    "links_compare_md": "Файл .md с известными ссылками",
+    "links_compare_md": "Файл .md с известными ссылками (необязательно — оставьте пустым, чтобы извлечь все ссылки на каналы)",
     "links_compare_channel": "Канал для сканирования ссылок",
     "links_compare_scan_limit": "Сканировать не более N постов (0 = все)",
     "links_compare_min_followers": "Мин. подписчиков (0 = без ограничения)",
@@ -494,7 +494,7 @@ RU = {
     "links_compare_col_link": "t.me/ ссылка",
     "links_compare_col_tag": "Тег",
     "links_compare_na": "н/д",
-    "links_compare_bad_md": "Сначала выберите корректный .md-файл с известными ссылками.",
+    "links_compare_bad_md": "Такого .md-файла не существует — исправьте путь или очистите поле, чтобы не фильтровать по известным ссылкам.",
     "links_compare_save_md_button": "💾 Сохранить MD",
     "links_compare_empty": "Сначала запустите сканирование — новых ссылок пока нет.",
     "links_compare_md_saved": "Сохранено: {path}",

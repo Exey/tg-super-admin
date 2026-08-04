@@ -207,10 +207,16 @@ async def _resolve_link_info(client, ctx, norm_link: str, kind: str) -> dict | N
 
 
 async def compare_links(client, p: dict, ctx) -> str:
-    """p: channel, md_path, scan_limit (0 = all), min_followers (0 = no minimum)"""
-    known_usernames, known_ids = parse_md_known(p["md_path"])
-    ctx.log(f"Loaded {len(known_usernames)} known username(s) and "
-            f"{len(known_ids)} known numeric ID(s) from {p['md_path']}")
+    """p: channel, md_path (optional — '' means no known-links filter),
+    scan_limit (0 = all), min_followers (0 = no minimum)"""
+    md_path = p.get("md_path") or ""
+    if md_path:
+        known_usernames, known_ids = parse_md_known(md_path)
+        ctx.log(f"Loaded {len(known_usernames)} known username(s) and "
+                f"{len(known_ids)} known numeric ID(s) from {md_path}")
+    else:
+        known_usernames, known_ids = set(), set()
+        ctx.log("No known-links file given — every channel link found will be reported.")
 
     entity = await resolve_entity(client, p["channel"])
     title = str(getattr(entity, "title", p["channel"]))
