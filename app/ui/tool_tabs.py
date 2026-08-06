@@ -18,7 +18,10 @@ from PySide6.QtWidgets import (
 from ..tools.backup import run_backup
 from ..tools.cleaner import run_cleaner, scan_keep_candidates
 from ..tools.common import reset_progress
-from ..tools.links_compare import compare_links
+from ..tools.links_compare import (
+    parse_saved_rows, populate_followers, populate_private_channels,
+    scan_channel_links,
+)
 from ..tools.post_image_replacer import run_post_image_replace
 from ..tools.repost import run_repost
 from ..tools.repost_group import count_repost_group, run_repost_group
@@ -1187,11 +1190,23 @@ class PostImageReplacerTab(ToolTab):
 class LinksCompareTab(ToolTab):
     tool_name = "links_compare"
 
+    # column index -> row-dict key used for sorting
+    _SORT_KEYS = {0: "followers", 1: "link", 2: "tag"}
+
+    def __init__(self, cfg, i18n, parent=None) -> None:
+        super().__init__(cfg, i18n, parent)
+        # The results table is the point of this tab — cap the log so
+        # window-height growth goes to the table instead of being split
+        # 50/50 with it.
+        self.log_view.setMaximumHeight(160)
+
     def help_text(self) -> str:
         return self.tr_("links_compare_help")
 
     def build_form(self) -> None:
         self._rows: list[dict] = []
+        self._sort_col = 0            # default: sort by followers
+        self._sort_desc = True
 
         self.md_edit = QLineEdit(self.cfg.get("LINKS_COMPARE_MD_PATH"))
         self.form.addRow(self.tr_("links_compare_md"),
@@ -1203,12 +1218,6 @@ class LinksCompareTab(ToolTab):
         self.scan_spin = QSpinBox()
         self.scan_spin.setRange(0, MAX_ID)
         self.form.addRow(self.tr_("links_compare_scan_limit"), self.scan_spin)
-
-        self.fetch_followers_check = QCheckBox(self.tr_("links_compare_fetch_followers"))
-        self.fetch_followers_check.setChecked(
-            self.cfg.get("LINKS_COMPARE_FETCH_FOLLOWERS") == "1")
-        self.fetch_followers_check.toggled.connect(self._on_fetch_followers_toggled)
-        self.form.addRow("", self.fetch_followers_check)
 
         self.delay_spin = QDoubleSpinBox()
         self.delay_spin.setRange(0.5, 30.0)
@@ -1228,7 +1237,6 @@ class LinksCompareTab(ToolTab):
         except ValueError:
             pass
         self.form.addRow(self.tr_("links_compare_min_followers"), self.min_followers_spin)
-        self._on_fetch_followers_toggled(self.fetch_followers_check.isChecked())
 
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([
@@ -1239,24 +1247,39 @@ class LinksCompareTab(ToolTab):
         self.table.verticalHeader().setVisible(False)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.horizontalHeader().setSectionResizeMode(
-            2, QHeaderView.ResizeMode.Stretch)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionsClickable(True)
+        header.sectionClicked.connect(self._on_header_clicked)
         self.table.cellDoubleClicked.connect(self._open_row)
         self.table.setMinimumHeight(260)
         # Added to the tab root (not the form row) so it grows on resize.
         self.layout().addWidget(self.table, stretch=1)
 
     def extra_buttons(self, layout) -> None:
+        self.load_md_btn = QPushButton(self.tr_("links_compare_load_md_button"))
+        self.load_md_btn.clicked.connect(self._load_md)
+        layout.addWidget(self.load_md_btn)
+
+        self.populate_public_btn = QPushButton(
+            self.tr_("links_compare_populate_public_button"))
+        self.populate_public_btn.clicked.connect(self._populate_followers)
+        layout.addWidget(self.populate_public_btn)
+
+        self.populate_private_btn = QPushButton(
+            self.tr_("links_compare_populate_private_button"))
+        self.populate_private_btn.clicked.connect(self._populate_private_channels)
+        layout.addWidget(self.populate_private_btn)
+
         self.save_md_btn = QPushButton(self.tr_("links_compare_save_md_button"))
         self.save_md_btn.clicked.connect(self._save_md)
         layout.addWidget(self.save_md_btn)
 
     def set_extra_buttons_enabled(self, enabled: bool) -> None:
+        self.load_md_btn.setEnabled(enabled)
+        self.populate_public_btn.setEnabled(enabled)
+        self.populate_private_btn.setEnabled(enabled)
         self.save_md_btn.setEnabled(enabled)
-
-    def _on_fetch_followers_toggled(self, checked: bool) -> None:
-        self.delay_spin.setEnabled(checked)
-        self.min_followers_spin.setEnabled(checked)
 
     def _open_row(self, row: int, col: int) -> None:
         if col != 1:
@@ -1265,17 +1288,52 @@ class LinksCompareTab(ToolTab):
         if item and item.text():
             QDesktopServices.openUrl(QUrl(f"https://{item.text()}"))
 
+    # ------------------------------------------------------------- sorting
+    def _on_header_clicked(self, col: int) -> None:
+        if col == self._sort_col:
+            self._sort_desc = not self._sort_desc
+        else:
+            self._sort_col = col
+            self._sort_desc = (col == 0)  # followers: highest first by default
+        self._rebuild_table()
+
+    def _followers_sort_key(self, row: dict):
+        """Broken links sink below unresolved ones, which sink below any
+        resolved count — so a followers-sorted view still reads top-to-
+        -bottom as "best -> unknown -> confirmed broken"."""
+        if row.get("broken"):
+            return -2
+        followers = row.get("followers")
+        return followers if followers is not None else -1
+
+    def _sort_value(self, row: dict, col: int):
+        if col == 0:
+            return self._followers_sort_key(row)
+        return (row.get(self._SORT_KEYS[col]) or "").lower()
+
+    def _update_sort_indicator(self) -> None:
+        order = (Qt.SortOrder.DescendingOrder if self._sort_desc
+                 else Qt.SortOrder.AscendingOrder)
+        self.table.horizontalHeader().setSortIndicatorShown(True)
+        self.table.horizontalHeader().setSortIndicator(self._sort_col, order)
+
+    def _followers_text(self, row: dict) -> str:
+        if row.get("broken"):
+            return "❌"
+        followers = row.get("followers")
+        return str(followers) if followers is not None else self.tr_("links_compare_na")
+
     def _rebuild_table(self) -> None:
-        self.table.setRowCount(len(self._rows))
-        for i, r in enumerate(self._rows):
-            followers = r.get("followers")
-            followers_text = (str(followers) if followers is not None
-                              else self.tr_("links_compare_na"))
-            self.table.setItem(i, 0, QTableWidgetItem(followers_text))
+        rows = sorted(self._rows, key=lambda r: self._sort_value(r, self._sort_col),
+                      reverse=self._sort_desc)
+        self.table.setRowCount(len(rows))
+        for i, r in enumerate(rows):
+            self.table.setItem(i, 0, QTableWidgetItem(self._followers_text(r)))
             link_item = QTableWidgetItem(r.get("link", ""))
             link_item.setToolTip(f"https://{r.get('link', '')}")
             self.table.setItem(i, 1, link_item)
             self.table.setItem(i, 2, QTableWidgetItem(r.get("tag", "")))
+        self._update_sort_indicator()
 
     # -------------------------------------------------------------- run
     def collect_params(self) -> dict | None:
@@ -1291,28 +1349,22 @@ class LinksCompareTab(ToolTab):
             return None
         self.cfg.profile["LINKS_COMPARE_MD_PATH"] = md_path
         self.cfg.profile["LINKS_COMPARE_CHANNEL"] = channel
-        self.cfg.profile["LINKS_COMPARE_MIN_FOLLOWERS"] = str(self.min_followers_spin.value())
-        self.cfg.profile["LINKS_COMPARE_FETCH_FOLLOWERS"] = (
-            "1" if self.fetch_followers_check.isChecked() else "0")
-        self.cfg.profile["LINKS_COMPARE_DELAY"] = str(self.delay_spin.value())
         self.cfg.save()
         return {
             "channel": channel,
             "md_path": md_path,
             "scan_limit": self.scan_spin.value(),
-            "min_followers": self.min_followers_spin.value(),
-            "fetch_followers": self.fetch_followers_check.isChecked(),
-            "delay": self.delay_spin.value(),
         }
 
     def tool_func(self):
-        return compare_links
+        return scan_channel_links
 
     def on_done(self, ok: bool, msg: str) -> None:
         if ok:
             try:
                 data = json.loads(msg)
                 self._rows = data["rows"]
+                self._sort_col, self._sort_desc = 0, True  # default: by followers
                 self._rebuild_table()
                 msg = self.tr_("links_compare_done", n=len(self._rows),
                                known=data.get("known", 0),
@@ -1320,6 +1372,85 @@ class LinksCompareTab(ToolTab):
             except (ValueError, KeyError):
                 ok = False
         super().on_done(ok, msg)
+
+    # ------------------------------------------------------------- populate
+    def _populate_params(self) -> dict:
+        self.cfg.profile["LINKS_COMPARE_MIN_FOLLOWERS"] = str(self.min_followers_spin.value())
+        self.cfg.profile["LINKS_COMPARE_DELAY"] = str(self.delay_spin.value())
+        self.cfg.save()
+        return {
+            "rows": self._rows,
+            "md_path": self.md_edit.text().strip(),
+            "min_followers": self.min_followers_spin.value(),
+            "delay": self.delay_spin.value(),
+        }
+
+    def _populate_followers(self) -> None:
+        if self.is_running() or not self.check_conn():
+            return
+        if not self._rows:
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("links_compare_empty"))
+            return
+        if not any(r.get("kind") == "user" and r.get("followers") is None
+                  for r in self._rows):
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("links_compare_nothing_to_populate"))
+            return
+        self.launch(populate_followers, self._populate_params(),
+                   done_slot=self._on_populate_done)
+
+    def _populate_private_channels(self) -> None:
+        if self.is_running() or not self.check_conn():
+            return
+        if not self._rows:
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("links_compare_empty"))
+            return
+        if not any(r.get("kind") == "invite" and r.get("followers") is None
+                  for r in self._rows):
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("links_compare_nothing_to_populate"))
+            return
+        self.launch(populate_private_channels, self._populate_params(),
+                   done_slot=self._on_populate_done)
+
+    def _on_populate_done(self, ok: bool, msg: str) -> None:
+        if ok:
+            try:
+                data = json.loads(msg)
+                self._rows = data["rows"]
+                self._rebuild_table()
+                if data.get("stopped_reason"):
+                    msg = self.tr_("links_compare_populate_stopped",
+                                   resolved=data.get("resolved", 0),
+                                   dropped=data.get("dropped", 0),
+                                   reason=data["stopped_reason"])
+                else:
+                    msg = self.tr_("links_compare_populate_done",
+                                   resolved=data.get("resolved", 0),
+                                   dropped=data.get("dropped", 0))
+            except (ValueError, KeyError):
+                ok = False
+        ToolTab.on_done(self, ok, msg)  # base reset; our on_done expects scan JSON
+
+    # ------------------------------------------------------------- load md
+    def _load_md(self) -> None:
+        if self.is_running():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, self.tr_("links_compare_load_md_button"), "", "Markdown (*.md)")
+        if not path:
+            return
+        rows = parse_saved_rows(path)
+        if not rows:
+            QMessageBox.warning(self, self.tr_("app_title"),
+                                self.tr_("links_compare_load_md_empty"))
+            return
+        self._rows = rows
+        self._sort_col, self._sort_desc = 0, True  # default: by followers
+        self._rebuild_table()
+        self.append_log(self.tr_("links_compare_md_loaded", n=len(rows), path=path))
 
     # ------------------------------------------------------------- save md
     def _save_md(self) -> None:
@@ -1342,9 +1473,13 @@ class LinksCompareTab(ToolTab):
 
     def _build_md_table(self) -> str:
         lines = ["|Followers|t.me/ link|tag|", "|---|---|---|"]
-        for r in self._rows:
-            followers = r.get("followers")
-            followers_text = str(followers) if followers is not None else ""
+        rows = sorted(self._rows, key=self._followers_sort_key, reverse=True)
+        for r in rows:
+            if r.get("broken"):
+                followers_text = "❌"
+            else:
+                followers = r.get("followers")
+                followers_text = str(followers) if followers is not None else ""
             link = (r.get("link") or "").replace("|", "\\|")
             tag = (r.get("tag") or "").replace("|", "\\|").replace("\n", " ").strip()
             lines.append(f"|{followers_text}|{link}|{tag}|")

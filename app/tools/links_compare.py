@@ -3,32 +3,42 @@ existing Markdown file (e.g. an export from
 https://github.com/Exey/tg-channel-stats), and report each new link's
 subscriber count.
 
-Two inputs:
-- `md_path`: a local .md file listing known/tracked channels. Its native
-  format is a table of `| Folder | Followers | ID/Username |` rows, where
-  the last column is either `@username` or a bare numeric channel ID (many
-  rows only have the numeric ID, no username) — see `parse_md_known`. Any
-  bare t.me/ links elsewhere in the file are picked up too, so a
-  differently-formatted MD still works as a "known" source.
-- `channel`: a Telegram channel/group to scan for t.me links posted in its
-  messages (e.g. a "recommended channels" directory post). A channel can be
-  referenced three ways, all detected: a plain "t.me/name" link, a bare
-  "@name" mention, or a category label hyperlinked straight to the channel
-  (the URL never appears as visible text at all — very common in directory
-  posts) — see `_extract_from_text`.
+Three separate steps, on purpose — resolving a link's follower count
+(`channels.GetFullChannel`) is a method Telegram flood-bans hard if called
+too fast, and a single unlucky call can come back with a multi-hour
+FloodWait. Doing that inline during a 10k-message scan means one bad request
+can strand the whole run. So:
 
-For every link mentioned in the channel but missing from the MD file, the
-"tag" is the hyperlink's own visible label when there is one, otherwise the
-same line's text before the match, or the previous line if that's empty (the
-common "category header, then link" directory format). A link only counts
-as "new" if:
-- it actually resolves to a real, live @username (broken/typo'd or private
-  links are dropped, not just shown with a blank follower count),
-- that entity is an actual channel (broadcast or supergroup) — personal
-  profiles, bots and plain group chats are filtered out,
-- neither its @username nor its resolved numeric ID (channels can be listed
-  under either) matches the MD file, and
-- its live subscriber count meets `min_followers` (0 = no minimum).
+- `scan_channel_links` — the fast, read-only step. Scans every message for
+  t.me links, drops the ones already tracked by @username in the MD file,
+  and returns the rest completely unresolved (no network calls beyond the
+  scan itself, so no flood risk regardless of channel size).
+- `populate_followers` — resolves the scan's `kind: 'user'` rows one at a
+  time (with a delay between each) to get a live subscriber count, drops
+  anything that turns out not to be a real channel or that's actually
+  already known (by numeric ID, or below the follower minimum).
+- `populate_private_channels` — same idea for `kind: 'invite'` rows
+  (t.me/+... links), previewed via `CheckChatInviteRequest` without joining.
+
+Both `populate_*` steps take whatever rows the scan (or a previous, cut-short
+populate run) produced, so a flood wait or dropped connection only stops
+that step — already-resolved rows are kept, and re-running the same button
+picks up only what's left unresolved.
+
+`md_path` is optional; its native format is a table of
+`| Folder | Followers | ID/Username |` rows, where the last column is either
+`@username` or a bare numeric channel ID (many rows only have the numeric
+ID) — see `parse_md_known`. Any bare t.me/ links elsewhere in the file are
+picked up too, so a differently-formatted MD still works as a "known"
+source. Leaving it empty just means nothing is treated as already known.
+
+A channel can be referenced three ways in a post, all detected: a plain
+"t.me/name" link, a bare "@name" mention, or a category label hyperlinked
+straight to the channel (the URL never appears as visible text at all — very
+common in "recommended channels" directory posts) — see `_extract_from_text`.
+The "tag" for each link is the hyperlink's own visible label when there is
+one, otherwise the same line's text before the match, or the previous line
+if that's empty.
 """
 from __future__ import annotations
 
@@ -37,7 +47,9 @@ import json
 import re
 from pathlib import Path
 
-from .common import resolve_entity, retry
+from telethon import errors
+
+from .common import resolve_entity
 
 HEARTBEAT_EVERY = 500
 
@@ -56,7 +68,7 @@ MENTION_RE = re.compile(r"(?<![\w@])@([A-Za-z][A-Za-z0-9_]{3,31})\b")
 MD_LINK_RE = re.compile(r"\[([^\[\]]*)\]\((https?://[^\s)]+)\)")
 
 _SKIP_FIRST_SEGMENTS = {"s", "iv", "share", "addstickers", "addemoji", "addtheme",
-                        "proxy", "socks", "c"}
+                        "proxy", "socks", "c", "boost"}
 
 
 def _parse_link(raw_path: str) -> tuple[str, str] | None:
@@ -143,6 +155,39 @@ def _extract_links_with_tags(msg) -> list[tuple[str, str, str]]:
     return _extract_from_text(text)
 
 
+def _split_md_row(line: str) -> list[str] | None:
+    """Split one `| a | b\\| escaped | c |` table line into stripped,
+    unescaped cells, or None if it doesn't look like a table row.
+
+    `line[1:-1]` (not `.strip("|")`) deliberately keeps a genuinely empty
+    first/last cell — `.strip("|")` would eat the delimiter pipe right along
+    with it (e.g. "||t.me/x|tag|" collapsing to "t.me/x|tag" and silently
+    losing a whole column) whenever a row's first or last cell is blank.
+    """
+    line = line.strip()
+    if not (line.startswith("|") and line.endswith("|") and len(line) >= 2):
+        return None
+    inner = line[1:-1]
+    cells: list[str] = []
+    current: list[str] = []
+    i = 0
+    while i < len(inner):
+        ch = inner[i]
+        if ch == "\\" and i + 1 < len(inner) and inner[i + 1] == "|":
+            current.append("|")
+            i += 2
+            continue
+        if ch == "|":
+            cells.append("".join(current).strip())
+            current = []
+            i += 1
+            continue
+        current.append(ch)
+        i += 1
+    cells.append("".join(current).strip())
+    return cells
+
+
 def parse_md_known(path: str) -> tuple[set[str], set[int]]:
     """Parse the tg-channel-stats table (`| Folder | Followers | ID/Username |`)
     plus any bare t.me/ links anywhere in the file. Returns
@@ -156,11 +201,8 @@ def parse_md_known(path: str) -> tuple[set[str], set[int]]:
     ids: set[int] = set()
 
     for raw_line in content.splitlines():
-        line = raw_line.strip()
-        if not (line.startswith("|") and line.endswith("|")):
-            continue
-        cells = [c.strip() for c in line.strip("|").split("|")]
-        if len(cells) < 3:
+        cells = _split_md_row(raw_line)
+        if cells is None or len(cells) < 3:
             continue
         last = cells[-1]
         if not last or set(last) <= {"-", ":"} or last.lower() in ("id/username", "id", "username"):
@@ -179,40 +221,45 @@ def parse_md_known(path: str) -> tuple[set[str], set[int]]:
     return usernames, ids
 
 
-async def _resolve_link_info(client, ctx, norm_link: str, kind: str) -> dict | None:
-    """{'id': int, 'followers': int|None} for a *channel* link specifically —
-    None if it's not a resolvable, real channel at all: an invite link (kind
-    != 'user'), an unresolvable/private/deleted @username, a personal
-    profile, a bot, or a plain group chat (not a broadcast channel /
-    supergroup). Followers come from the channel's full info (public data,
-    no admin rights needed)."""
-    if kind != "user":
-        return None  # invite links aren't resolvable to an entity by username
-    from telethon.tl.functions.channels import GetFullChannelRequest
-    from telethon.tl.types import Channel
-
-    username = norm_link.split("t.me/", 1)[-1]
+def parse_saved_rows(path: str) -> list[dict]:
+    """Reads a file previously written by "Save MD" (`|Followers|t.me/
+    link|tag|`) back into row dicts, so Populate can resume a run without
+    re-scanning the channel from scratch — e.g. after closing the app
+    between a flood-wait stop and its cooldown."""
     try:
-        resolved = await retry(ctx, resolve_entity, client, f"@{username}")
-        if not isinstance(resolved, Channel):
-            return None  # a user/bot profile or a plain group chat, not a channel
-        full = await retry(ctx, client, GetFullChannelRequest(resolved))
-        if full is None:
-            return None
-        return {
-            "id": resolved.id,
-            "followers": getattr(full.full_chat, "participants_count", None),
-        }
-    except Exception:
-        return None
+        content = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    rows: list[dict] = []
+    for raw_line in content.splitlines():
+        cells = _split_md_row(raw_line)
+        if cells is None or len(cells) < 3:
+            continue
+        followers_text, link, tag = cells[0], cells[1], cells[2]
+        # A blank Followers cell is a legit "count unknown" row, not a
+        # separator — `set("") <= {"-", ":"}` is trivially True (the empty
+        # set is a subset of everything), so that check must not fire here.
+        if followers_text.lower() == "followers" or (
+                followers_text and set(followers_text) <= {"-", ":"}):
+            continue  # header / separator row
+        if not link.startswith("t.me/"):
+            continue
+        parsed = _parse_link(link.split("t.me/", 1)[-1])
+        if not parsed:
+            continue
+        norm, kind = parsed
+        broken = followers_text == "❌"
+        followers = int(followers_text) if followers_text.isdigit() else None
+        rows.append({"link": norm, "tag": tag, "kind": kind,
+                    "followers": followers, "id": None, "broken": broken})
+    return rows
 
 
-async def compare_links(client, p: dict, ctx) -> str:
+async def scan_channel_links(client, p: dict, ctx) -> str:
     """p: channel, md_path (optional — '' means no known-links filter),
-    scan_limit (0 = all), min_followers (0 = no minimum), fetch_followers
-    (bool — resolve each candidate for its subscriber count/channel-type/
-    numeric-ID check; this is the expensive, flood-prone part), delay
-    (seconds to wait between each of those lookups)."""
+    scan_limit (0 = all). Read-only: no per-link network calls, so this is
+    safe to run on any size of channel regardless of flood limits."""
     md_path = p.get("md_path") or ""
     if md_path:
         known_usernames, known_ids = parse_md_known(md_path)
@@ -248,62 +295,16 @@ async def compare_links(client, p: dict, ctx) -> str:
 
     ctx.log(f"Found {len(found)} unique link(s) in '{title}'.")
 
-    # A link already tracked by @username needs no lookup. Everything else
-    # gets resolved — partly for the follower count, partly because it might
-    # still be a known channel just listed by numeric ID (or under a since-
-    # changed username) in the MD file.
-    candidates = {
-        norm: info for norm, info in found.items()
+    rows = [
+        {"link": norm, "tag": info["tag"], "kind": info["kind"],
+         "followers": None, "id": None, "broken": False}
+        for norm, info in sorted(found.items())
         if not (info["kind"] == "user"
                 and norm.split("t.me/", 1)[-1] in known_usernames)
-    }
-    items = sorted(candidates.items())
-
-    fetch_followers = bool(p.get("fetch_followers"))
-    if not fetch_followers:
-        # Fast path: no per-link API calls at all, so no flood risk — just
-        # report what the scan found, unresolved. Numeric-ID matches and the
-        # channel-only/min-followers filters need a resolved entity, so they
-        # don't apply here.
-        ctx.log(f"{len(items)} link(s) not matched by username (follower "
-                f"lookup skipped — enable it to verify + get counts).")
-        rows = [{"link": norm, "tag": info["tag"], "followers": None}
-               for norm, info in items]
-        return json.dumps({
-            "cancelled": ctx.cancelled(),
-            "title": title,
-            "known": len(known_usernames) + len(known_ids),
-            "scanned_links": len(found),
-            "rows": rows,
-        })
-
-    delay = float(p.get("delay") or 0)
-    ctx.log(f"{len(items)} link(s) not matched by username — checking "
-            f"numeric IDs / fetching follower counts "
-            f"({delay}s between each to avoid a flood ban)…")
-
-    min_followers = int(p.get("min_followers") or 0)
-    rows: list[dict] = []
-    skipped_not_channel = 0
-    for i, (norm, info) in enumerate(items, 1):
-        if ctx.cancelled():
-            break
-        resolved = await _resolve_link_info(client, ctx, norm, info["kind"])
-        if resolved is None:
-            skipped_not_channel += 1
-        elif resolved["id"] not in known_ids:
-            followers = resolved["followers"]
-            if followers is not None and followers >= min_followers:
-                rows.append({"link": norm, "tag": info["tag"], "followers": followers})
-        ctx.progress(i, len(items))
-        if delay and i < len(items):
-            await asyncio.sleep(delay)
-
-    if skipped_not_channel:
-        ctx.log(f"  Skipped {skipped_not_channel} link(s) that aren't a "
-                f"resolvable channel (invite link, group, bot, private, …).")
-
-    rows.sort(key=lambda r: r["followers"], reverse=True)
+    ]
+    ctx.log(f"{len(rows)} link(s) not matched by a known username — use "
+            f"\"Populate followers\" / \"Populate Private channels\" to "
+            f"resolve them.")
 
     return json.dumps({
         "cancelled": ctx.cancelled(),
@@ -311,4 +312,267 @@ async def compare_links(client, p: dict, ctx) -> str:
         "known": len(known_usernames) + len(known_ids),
         "scanned_links": len(found),
         "rows": rows,
+    })
+
+
+class _FloodStop(Exception):
+    """Raised instead of waiting out a FloodWaitError inline — for a batch
+    of many per-link lookups, blocking the whole run on one flood wait
+    (which can be hours) is worse than stopping now and letting the user
+    retry later; already-resolved rows are kept either way."""
+
+    def __init__(self, seconds: int) -> None:
+        self.seconds = seconds
+
+
+def _fmt_seconds(total: int) -> str:
+    h, rem = divmod(int(total), 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}h {m}m"
+    if m:
+        return f"{m}m {s}s"
+    return f"{s}s"
+
+
+async def _try_resolve_channel(client, norm_link: str) -> dict:
+    """One-shot (no retry/backoff) resolve of a @username link to
+    {'status': 'ok', 'id':, 'followers':} or {'status': 'not_channel'} —
+    the latter for anything that isn't a real, live broadcast channel or
+    supergroup (private/deleted/typo'd username, a personal profile, a bot,
+    a plain group chat). Raises _FloodStop / connection errors so the batch
+    driver can decide whether to keep going."""
+    from telethon.tl.functions.channels import GetFullChannelRequest
+    from telethon.tl.types import Channel
+
+    username = norm_link.split("t.me/", 1)[-1]
+    try:
+        resolved = await resolve_entity(client, f"@{username}")
+    except errors.FloodWaitError as e:
+        raise _FloodStop(e.seconds) from e
+    except (ConnectionError, OSError, asyncio.TimeoutError):
+        raise
+    except Exception:
+        return {"status": "broken"}
+
+    if not isinstance(resolved, Channel):
+        return {"status": "broken"}
+
+    try:
+        full = await client(GetFullChannelRequest(resolved))
+    except errors.FloodWaitError as e:
+        raise _FloodStop(e.seconds) from e
+    except (ConnectionError, OSError, asyncio.TimeoutError):
+        raise
+    except Exception:
+        return {"status": "broken"}
+
+    return {
+        "status": "ok",
+        "id": resolved.id,
+        "followers": getattr(full.full_chat, "participants_count", None),
+    }
+
+
+async def _try_resolve_invite(client, norm_link: str) -> dict:
+    """One-shot preview of an invite link (t.me/+hash or t.me/joinchat/hash)
+    via CheckChatInviteRequest — doesn't join. {'status': 'ok', 'id'
+    (may be None if not already a member), 'followers', 'title'} or
+    {'status': 'not_channel'}."""
+    from telethon.tl.functions.messages import CheckChatInviteRequest
+    from telethon.tl.types import ChatInvite, ChatInviteAlready, ChatInvitePeek
+
+    tail = norm_link.split("t.me/", 1)[-1]
+    if tail.startswith("+"):
+        chat_hash = tail[1:]
+    elif tail.startswith("joinchat/"):
+        chat_hash = tail.split("/", 1)[-1]
+    else:
+        return {"status": "broken"}
+
+    try:
+        result = await client(CheckChatInviteRequest(chat_hash))
+    except errors.FloodWaitError as e:
+        raise _FloodStop(e.seconds) from e
+    except (ConnectionError, OSError, asyncio.TimeoutError):
+        raise
+    except Exception:
+        return {"status": "broken"}
+
+    if isinstance(result, ChatInvite):
+        return {"status": "ok", "id": None,
+                "followers": result.participants_count, "title": result.title}
+    if isinstance(result, (ChatInviteAlready, ChatInvitePeek)):
+        chat = result.chat
+        return {"status": "ok", "id": getattr(chat, "id", None),
+                "followers": getattr(chat, "participants_count", None),
+                "title": getattr(chat, "title", None)}
+    return {"status": "broken"}
+
+
+async def _run_resolution_batch(client, ctx, pending: list[dict], delay: float,
+                                resolve_one) -> tuple[int, int, int, str | None]:
+    """Drives `resolve_one(client, row) -> dict` over `pending`, mutating
+    each row in place based on the returned status:
+    - 'ok' (+ fields to merge in) — resolved successfully.
+    - 'excluded' — a real channel, but filtered out for an unrelated reason
+      (already known by numeric ID, below the follower minimum) — silently
+      dropped from the row list, same as if it were never found.
+    - 'broken' — confirmed *not* a resolvable channel/invite at all
+      (private, deleted, typo'd, a personal profile, a bot, a plain group).
+      Kept in the row list with `row['broken'] = True` so the link isn't
+      retried forever and shows up as ❌ rather than silently vanishing.
+    `resolve_one` may also raise _FloodStop or a connection error.
+
+    A flood wait or an unrecoverable connection loss stops the *whole*
+    batch rather than just skipping that one row — grinding through the
+    rest one-by-one right after either is pointless (still flood-limited)
+    or impossible (still disconnected). Returns
+    (resolved_count, excluded_count, broken_count, stopped_reason)."""
+    resolved = excluded = broken = 0
+    reconnects = 0
+    stopped_reason: str | None = None
+
+    for i, row in enumerate(pending, 1):
+        if ctx.cancelled():
+            break
+        try:
+            info = await resolve_one(client, row)
+        except _FloodStop as e:
+            stopped_reason = (f"Telegram's flood limit kicked in — wait "
+                              f"~{_fmt_seconds(e.seconds)} before running this "
+                              f"again (already-resolved links are kept).")
+            break
+        except (ConnectionError, OSError, asyncio.TimeoutError) as e:
+            if reconnects >= 3:
+                stopped_reason = "Lost connection to Telegram repeatedly — stopping for now."
+                break
+            reconnects += 1
+            ctx.log(f"  Connection issue ({e}) — reconnecting ({reconnects}/3)…")
+            try:
+                if not client.is_connected():
+                    await client.connect()
+                info = (await resolve_one(client, row)
+                       if client.is_connected() else None)
+            except _FloodStop as e2:
+                stopped_reason = (f"Telegram's flood limit kicked in — wait "
+                                  f"~{_fmt_seconds(e2.seconds)} before running "
+                                  f"this again (already-resolved links are kept).")
+                break
+            except Exception:
+                info = None
+            if info is None:
+                stopped_reason = "Lost connection to Telegram and couldn't reconnect — stopping for now."
+                break
+
+        status = info.get("status")
+        if status == "ok":
+            row.update({k: v for k, v in info.items() if k != "status"})
+            resolved += 1
+        elif status == "excluded":
+            row["_drop"] = True
+            excluded += 1
+        else:  # 'broken'
+            row["broken"] = True
+            broken += 1
+        ctx.progress(i, len(pending))
+        if delay and i < len(pending):
+            await asyncio.sleep(delay)
+
+    return resolved, excluded, broken, stopped_reason
+
+
+async def populate_followers(client, p: dict, ctx) -> str:
+    """p: rows (from scan_channel_links / a previous populate_* run),
+    md_path (optional), min_followers (0 = no minimum), delay (seconds
+    between each lookup). Resolves 'user'-kind rows missing a follower count
+    and not already marked broken. A row that resolves to a real channel but
+    is already known (by numeric ID) or below min_followers is silently
+    dropped; one that isn't a resolvable channel at all is kept with
+    `broken: True` (shows as ❌) so it isn't retried forever."""
+    rows = list(p.get("rows") or [])
+    md_path = p.get("md_path") or ""
+    known_ids = parse_md_known(md_path)[1] if md_path else set()
+    min_followers = int(p.get("min_followers") or 0)
+    delay = float(p.get("delay") or 2.0)
+
+    pending = [r for r in rows if r.get("kind") == "user"
+              and r.get("followers") is None and not r.get("broken")]
+    if not pending:
+        ctx.log("Nothing to resolve — every username link is either done or marked broken.")
+    else:
+        ctx.log(f"Resolving {len(pending)} username link(s), {delay}s apart…")
+
+    async def resolve_one(client, row):
+        info = await _try_resolve_channel(client, row["link"])
+        if info["status"] != "ok":
+            return info  # 'broken' — not a resolvable channel at all
+        if info["id"] in known_ids:
+            return {"status": "excluded"}
+        if info["followers"] is None or info["followers"] < min_followers:
+            return {"status": "excluded"}
+        return {"status": "ok", "id": info["id"], "followers": info["followers"]}
+
+    resolved, excluded, broken, stopped_reason = await _run_resolution_batch(
+        client, ctx, pending, delay, resolve_one)
+    rows = [r for r in rows if not r.get("_drop")]
+
+    if stopped_reason:
+        ctx.log(f"  Stopped early: {stopped_reason}")
+    ctx.log(f"Resolved {resolved} link(s); excluded {excluded} (already known or "
+            f"below the follower minimum); marked {broken} broken (❌ — not a "
+            f"resolvable channel).")
+
+    return json.dumps({
+        "cancelled": ctx.cancelled(),
+        "rows": rows,
+        "resolved": resolved,
+        "dropped": excluded + broken,
+        "stopped_reason": stopped_reason,
+    })
+
+
+async def populate_private_channels(client, p: dict, ctx) -> str:
+    """Same as populate_followers, but for 'invite'-kind rows (t.me/+... /
+    t.me/joinchat/... links), previewed without joining."""
+    rows = list(p.get("rows") or [])
+    md_path = p.get("md_path") or ""
+    known_ids = parse_md_known(md_path)[1] if md_path else set()
+    min_followers = int(p.get("min_followers") or 0)
+    delay = float(p.get("delay") or 2.0)
+
+    pending = [r for r in rows if r.get("kind") == "invite"
+              and r.get("followers") is None and not r.get("broken")]
+    if not pending:
+        ctx.log("Nothing to resolve — every invite link is either done or marked broken.")
+    else:
+        ctx.log(f"Checking {len(pending)} invite link(s), {delay}s apart…")
+
+    async def resolve_one(client, row):
+        info = await _try_resolve_invite(client, row["link"])
+        if info["status"] != "ok":
+            return info  # 'broken' — invalid/expired invite
+        if info["id"] is not None and info["id"] in known_ids:
+            return {"status": "excluded"}
+        if info["followers"] is not None and info["followers"] < min_followers:
+            return {"status": "excluded"}
+        if not row.get("tag") and info.get("title"):
+            row["tag"] = info["title"]
+        return {"status": "ok", "id": info["id"], "followers": info["followers"]}
+
+    resolved, excluded, broken, stopped_reason = await _run_resolution_batch(
+        client, ctx, pending, delay, resolve_one)
+    rows = [r for r in rows if not r.get("_drop")]
+
+    if stopped_reason:
+        ctx.log(f"  Stopped early: {stopped_reason}")
+    ctx.log(f"Resolved {resolved} invite link(s); excluded {excluded}; "
+            f"marked {broken} broken (❌ — invalid/expired invite).")
+
+    return json.dumps({
+        "cancelled": ctx.cancelled(),
+        "rows": rows,
+        "resolved": resolved,
+        "dropped": excluded + broken,
+        "stopped_reason": stopped_reason,
     })
