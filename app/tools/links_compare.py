@@ -1,7 +1,5 @@
-"""Find t.me links posted in a channel that aren't already tracked in an
-existing Markdown file (e.g. an export from
-https://github.com/Exey/tg-channel-stats), and report each new link's
-subscriber count.
+"""Find t.me links posted in a channel and report each one's subscriber
+count.
 
 Three separate steps, on purpose — resolving a link's follower count
 (`channels.GetFullChannel`) is a method Telegram flood-bans hard if called
@@ -10,13 +8,19 @@ FloodWait. Doing that inline during a 10k-message scan means one bad request
 can strand the whole run. So:
 
 - `scan_channel_links` — the fast, read-only step. Scans every message for
-  t.me links, drops the ones already tracked by @username in the MD file,
-  and returns the rest completely unresolved (no network calls beyond the
-  scan itself, so no flood risk regardless of channel size).
-- `populate_followers` — resolves the scan's `kind: 'user'` rows one at a
-  time (with a delay between each) to get a live subscriber count, drops
-  anything that turns out not to be a real channel or that's actually
-  already known (by numeric ID, or below the follower minimum).
+  t.me links and returns them all completely unresolved (no network calls
+  beyond the scan itself, so no flood risk regardless of channel size). A
+  channel can be referenced three ways in a post, all detected: a plain
+  "t.me/name" link, a bare "@name" mention, or a category label hyperlinked
+  straight to the channel (the URL never appears as visible text at all —
+  very common in "recommended channels" directory posts) — see
+  `_extract_from_text`. The "tag" for each link is the hyperlink's own
+  visible label when there is one, otherwise the same line's text before
+  the match, or the previous line if that's empty.
+- `populate_followers` — resolves the scan's `kind: 'user'` rows missing a
+  follower count, one at a time (with a delay between each), to get a live
+  subscriber count. A row that isn't a real, resolvable channel is kept
+  with `broken: True` (❌) rather than retried forever.
 - `populate_private_channels` — same idea for `kind: 'invite'` rows
   (t.me/+... links), previewed via `CheckChatInviteRequest` without joining.
 
@@ -25,20 +29,12 @@ populate run) produced, so a flood wait or dropped connection only stops
 that step — already-resolved rows are kept, and re-running the same button
 picks up only what's left unresolved.
 
-`md_path` is optional; its native format is a table of
-`| Folder | Followers | ID/Username |` rows, where the last column is either
-`@username` or a bare numeric channel ID (many rows only have the numeric
-ID) — see `parse_md_known`. Any bare t.me/ links elsewhere in the file are
-picked up too, so a differently-formatted MD still works as a "known"
-source. Leaving it empty just means nothing is treated as already known.
-
-A channel can be referenced three ways in a post, all detected: a plain
-"t.me/name" link, a bare "@name" mention, or a category label hyperlinked
-straight to the channel (the URL never appears as visible text at all — very
-common in "recommended channels" directory posts) — see `_extract_from_text`.
-The "tag" for each link is the hyperlink's own visible label when there is
-one, otherwise the same line's text before the match, or the previous line
-if that's empty.
+`exclude_by_md` is a separate, on-demand filter — not part of any of the
+above — for dropping rows that match a known-links Markdown file (the same
+`| Folder | Followers | ID/Username |` format an export from
+https://github.com/Exey/tg-channel-stats uses, last column either
+`@username` or a bare numeric channel ID; see `parse_md_known`). Call it
+whenever, on whatever rows are currently in the table.
 """
 from __future__ import annotations
 
@@ -256,19 +252,30 @@ def parse_saved_rows(path: str) -> list[dict]:
     return rows
 
 
-async def scan_channel_links(client, p: dict, ctx) -> str:
-    """p: channel, md_path (optional — '' means no known-links filter),
-    scan_limit (0 = all). Read-only: no per-link network calls, so this is
-    safe to run on any size of channel regardless of flood limits."""
-    md_path = p.get("md_path") or ""
-    if md_path:
-        known_usernames, known_ids = parse_md_known(md_path)
-        ctx.log(f"Loaded {len(known_usernames)} known username(s) and "
-                f"{len(known_ids)} known numeric ID(s) from {md_path}")
-    else:
-        known_usernames, known_ids = set(), set()
-        ctx.log("No known-links file given — every channel link found will be reported.")
+def exclude_by_md(rows: list[dict], md_path: str) -> tuple[list[dict], int]:
+    """Drops rows matching a known-links MD (same format as
+    `parse_md_known`): by @username always, and by numeric ID for rows
+    that have already been through Populate (unresolved rows have no ID
+    yet, so they can only be matched by username). Local file read + set
+    lookups — no Telegram client needed, safe to call any time on whatever
+    rows are currently in the table. Returns (remaining_rows, removed_count)."""
+    known_usernames, known_ids = parse_md_known(md_path)
+    kept: list[dict] = []
+    removed = 0
+    for r in rows:
+        username = r["link"].split("t.me/", 1)[-1] if r.get("kind") == "user" else None
+        rid = r.get("id")
+        if (username and username in known_usernames) or (rid is not None and rid in known_ids):
+            removed += 1
+            continue
+        kept.append(r)
+    return kept, removed
 
+
+async def scan_channel_links(client, p: dict, ctx) -> str:
+    """p: channel, scan_limit (0 = all). Read-only: no per-link network
+    calls, so this is safe to run on any size of channel regardless of
+    flood limits."""
     entity = await resolve_entity(client, p["channel"])
     title = str(getattr(entity, "title", p["channel"]))
     scan_limit = int(p.get("scan_limit") or 0)
@@ -293,23 +300,16 @@ async def scan_channel_links(client, p: dict, ctx) -> str:
             ctx.log(f"  scanned {scanned}/{total or '?'}…")
         ctx.progress(scanned, total)
 
-    ctx.log(f"Found {len(found)} unique link(s) in '{title}'.")
-
     rows = [
         {"link": norm, "tag": info["tag"], "kind": info["kind"],
          "followers": None, "id": None, "broken": False}
         for norm, info in sorted(found.items())
-        if not (info["kind"] == "user"
-                and norm.split("t.me/", 1)[-1] in known_usernames)
     ]
-    ctx.log(f"{len(rows)} link(s) not matched by a known username — use "
-            f"\"Populate followers\" / \"Populate Private channels\" to "
-            f"resolve them.")
+    ctx.log(f"Found {len(rows)} unique link(s) in '{title}'.")
 
     return json.dumps({
         "cancelled": ctx.cancelled(),
         "title": title,
-        "known": len(known_usernames) + len(known_ids),
         "scanned_links": len(found),
         "rows": rows,
     })
@@ -484,15 +484,15 @@ async def _run_resolution_batch(client, ctx, pending: list[dict], delay: float,
 
 async def populate_followers(client, p: dict, ctx) -> str:
     """p: rows (from scan_channel_links / a previous populate_* run),
-    md_path (optional), min_followers (0 = no minimum), delay (seconds
-    between each lookup). Resolves 'user'-kind rows missing a follower count
-    and not already marked broken. A row that resolves to a real channel but
-    is already known (by numeric ID) or below min_followers is silently
-    dropped; one that isn't a resolvable channel at all is kept with
-    `broken: True` (shows as ❌) so it isn't retried forever."""
+    min_followers (0 = no minimum), delay (seconds between each lookup).
+    Resolves 'user'-kind rows missing a follower count and not already
+    marked broken — i.e. it always starts from whatever's still empty, so
+    rows already resolved (by an earlier run, or loaded from a saved MD)
+    are left untouched. A row that resolves to a real channel but falls
+    below min_followers is silently dropped; one that isn't a resolvable
+    channel at all is kept with `broken: True` (shows as ❌) so it isn't
+    retried forever."""
     rows = list(p.get("rows") or [])
-    md_path = p.get("md_path") or ""
-    known_ids = parse_md_known(md_path)[1] if md_path else set()
     min_followers = int(p.get("min_followers") or 0)
     delay = float(p.get("delay") or 2.0)
 
@@ -507,8 +507,6 @@ async def populate_followers(client, p: dict, ctx) -> str:
         info = await _try_resolve_channel(client, row["link"])
         if info["status"] != "ok":
             return info  # 'broken' — not a resolvable channel at all
-        if info["id"] in known_ids:
-            return {"status": "excluded"}
         if info["followers"] is None or info["followers"] < min_followers:
             return {"status": "excluded"}
         return {"status": "ok", "id": info["id"], "followers": info["followers"]}
@@ -519,8 +517,8 @@ async def populate_followers(client, p: dict, ctx) -> str:
 
     if stopped_reason:
         ctx.log(f"  Stopped early: {stopped_reason}")
-    ctx.log(f"Resolved {resolved} link(s); excluded {excluded} (already known or "
-            f"below the follower minimum); marked {broken} broken (❌ — not a "
+    ctx.log(f"Resolved {resolved} link(s); excluded {excluded} (below the "
+            f"follower minimum); marked {broken} broken (❌ — not a "
             f"resolvable channel).")
 
     return json.dumps({
@@ -536,8 +534,6 @@ async def populate_private_channels(client, p: dict, ctx) -> str:
     """Same as populate_followers, but for 'invite'-kind rows (t.me/+... /
     t.me/joinchat/... links), previewed without joining."""
     rows = list(p.get("rows") or [])
-    md_path = p.get("md_path") or ""
-    known_ids = parse_md_known(md_path)[1] if md_path else set()
     min_followers = int(p.get("min_followers") or 0)
     delay = float(p.get("delay") or 2.0)
 
@@ -552,8 +548,6 @@ async def populate_private_channels(client, p: dict, ctx) -> str:
         info = await _try_resolve_invite(client, row["link"])
         if info["status"] != "ok":
             return info  # 'broken' — invalid/expired invite
-        if info["id"] is not None and info["id"] in known_ids:
-            return {"status": "excluded"}
         if info["followers"] is not None and info["followers"] < min_followers:
             return {"status": "excluded"}
         if not row.get("tag") and info.get("title"):

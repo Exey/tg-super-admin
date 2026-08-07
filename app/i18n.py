@@ -225,28 +225,14 @@ EN = {
                             "image or new text on a row.",
     "post_replacer_bad_image": "Image file not found: {path}",
     # links compare
-    "links_compare_help": "Three separate steps, on purpose. Run: scans a "
-                          "channel for other channels it mentions — plain "
-                          "t.me/ links, bare @usernames, or a category "
-                          "hyperlinked straight to the channel (e.g. a "
-                          "\"recommended channels\" directory post) — and "
-                          "lists the ones not already tracked in a known-"
-                          "links .md file, matched by @username or the "
-                          "channel's numeric ID. This step makes no per-link "
-                          "requests, so it's safe on any size of channel. "
-                          "\"tag\" is the hyperlink's own label, or the text "
-                          "right before the link. Count Followers for Public "
-                          "Ch. / Count Followers for Private Ch. then resolve the "
-                          "@username / invite-link rows one at a time (with "
-                          "a delay) to verify they're real and get a live "
-                          "subscriber count — Telegram flood-bans this hard "
-                          "if it's called too fast, so if it stops early "
-                          "with a wait time, just click the same button "
-                          "again later; already-resolved rows are kept. Save "
-                          "MD exports the current table; Load MD reads one "
-                          "back in, so you can close the app and resume "
-                          "populating later without re-scanning.",
-    "links_compare_md": "Known-links .md file (optional — leave empty to extract every channel link)",
+    "links_compare_help": "Run scans a channel for links to other channels "
+                          "(t.me/ links, @mentions, or hyperlinked names) — "
+                          "fast, no per-link requests. Count Followers for "
+                          "Public/Private Ch. then resolve those one at a "
+                          "time to get a live subscriber count (flood-safe: "
+                          "if it stops early, just click it again later). "
+                          "Save/Load MD round-trip the table. Exclude links "
+                          "by MD removes rows matching a known-links file.",
     "links_compare_channel": "Channel to scan for links",
     "links_compare_scan_limit": "Scan at most N posts (0 = all)",
     "links_compare_delay": "Delay between populate lookups (s)",
@@ -255,11 +241,11 @@ EN = {
     "links_compare_col_link": "t.me/ link",
     "links_compare_col_tag": "Tag",
     "links_compare_na": "n/a",
-    "links_compare_bad_md": "That .md file path doesn't exist — fix it, or clear the field to skip the known-links filter.",
     "links_compare_load_md_button": "📂 Load MD",
     "links_compare_populate_public_button": "Count Followers for Public Ch.",
     "links_compare_populate_private_button": "Count Followers for Private Ch.",
     "links_compare_save_md_button": "💾 Save MD",
+    "links_compare_exclude_md_button": "Exclude links by MD",
     "links_compare_empty": "Run the scan first — no links found yet.",
     "links_compare_nothing_to_populate": "Nothing left to populate — every "
                                          "matching link already has a result.",
@@ -267,8 +253,8 @@ EN = {
                                    "t.me/ link|tag| format Save MD writes.",
     "links_compare_md_loaded": "Loaded {n} row(s) from {path}",
     "links_compare_md_saved": "Saved: {path}",
-    "links_compare_done": "{n} new link(s) — {scanned} found in the channel, "
-                          "{known} already known.",
+    "links_compare_excluded": "Excluded {n} link(s) matching {path}",
+    "links_compare_done": "{n} link(s) found — {scanned} scanned in the channel.",
     "links_compare_populate_done": "Resolved {resolved}, dropped {dropped} "
                                    "(not a channel, already known, or below "
                                    "the follower minimum).",
@@ -493,31 +479,17 @@ RU = {
                              "или текст хотя бы в одной строке.",
     "post_replacer_bad_image": "Файл картинки не найден: {path}",
     # links compare
-    "links_compare_help": "Три отдельных шага, намеренно. «Запустить»: "
-                          "сканирует канал на упоминания других каналов — "
-                          "обычные t.me/ ссылки, голые @username или текст, "
-                          "гиперссылкой ведущий прямо на канал (например, "
-                          "пост-подборку «рекомендуемые каналы») — и "
-                          "показывает те, которых ещё нет в известном "
-                          ".md-файле (совпадение по @username или по "
-                          "числовому ID). Этот шаг не делает запросов по "
-                          "отдельным ссылкам, поэтому безопасен для канала "
-                          "любого размера. «tag» — это подпись самой "
-                          "гиперссылки, либо текст перед ссылкой. «Подсчитать "
-                          "подписчиков (публ.)» / «Подсчитать подписчиков "
-                          "(приват.)» затем резолвят строки с @username / инвайт-"
-                          "ссылками по одной (с задержкой), чтобы проверить, "
-                          "что это реальный канал, и получить текущее число "
-                          "подписчиков — Telegram жёстко банит за флуд по "
-                          "этому методу при слишком частых запросах, так что "
-                          "если процесс остановился раньше времени с "
-                          "указанием времени ожидания — просто нажмите ту же "
-                          "кнопку позже; уже обработанные строки сохраняются. "
-                          "«Сохранить MD» экспортирует текущую таблицу; "
-                          "«Загрузить MD» читает её обратно, так что можно "
-                          "закрыть приложение и продолжить получение данных "
-                          "позже без повторного сканирования.",
-    "links_compare_md": "Файл .md с известными ссылками (необязательно — оставьте пустым, чтобы извлечь все ссылки на каналы)",
+    "links_compare_help": "«Запустить» сканирует канал на ссылки на другие "
+                          "каналы (t.me/ ссылки, @упоминания, текст-"
+                          "гиперссылка) — быстро, без запросов по отдельным "
+                          "ссылкам. «Подсчитать подписчиков (публ./приват.)» "
+                          "затем резолвит их по одной, чтобы получить "
+                          "текущее число подписчиков (защита от флуда: если "
+                          "остановилось раньше времени — просто нажмите "
+                          "кнопку ещё раз позже). «Сохранить MD»/«Загрузить "
+                          "MD» сохраняют и читают таблицу обратно. "
+                          "«Исключить ссылки по MD» убирает строки, "
+                          "совпадающие с файлом известных ссылок.",
     "links_compare_channel": "Канал для сканирования ссылок",
     "links_compare_scan_limit": "Сканировать не более N постов (0 = все)",
     "links_compare_delay": "Задержка между запросами (с)",
@@ -526,11 +498,11 @@ RU = {
     "links_compare_col_link": "t.me/ ссылка",
     "links_compare_col_tag": "Тег",
     "links_compare_na": "н/д",
-    "links_compare_bad_md": "Такого .md-файла не существует — исправьте путь или очистите поле, чтобы не фильтровать по известным ссылкам.",
     "links_compare_load_md_button": "📂 Загрузить MD",
     "links_compare_populate_public_button": "Подсчитать подписчиков (публ.)",
     "links_compare_populate_private_button": "Подсчитать подписчиков (приват.)",
     "links_compare_save_md_button": "💾 Сохранить MD",
+    "links_compare_exclude_md_button": "Исключить ссылки по MD",
     "links_compare_empty": "Сначала запустите сканирование — ссылок пока нет.",
     "links_compare_nothing_to_populate": "Обрабатывать больше нечего — у всех "
                                          "подходящих ссылок уже есть результат.",
@@ -539,8 +511,8 @@ RU = {
                                    "пишет «Сохранить MD».",
     "links_compare_md_loaded": "Загружено {n} строк из {path}",
     "links_compare_md_saved": "Сохранено: {path}",
-    "links_compare_done": "{n} новых ссылок — найдено {scanned} в канале, "
-                          "{known} уже известны.",
+    "links_compare_excluded": "Исключено {n} ссылок по файлу {path}",
+    "links_compare_done": "Найдено ссылок: {n} — просканировано {scanned} в канале.",
     "links_compare_populate_done": "Обработано {resolved}, отброшено {dropped} "
                                    "(не канал, уже известен, или меньше "
                                    "минимума подписчиков).",

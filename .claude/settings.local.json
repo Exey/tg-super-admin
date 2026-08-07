@@ -27,7 +27,8 @@
       "Bash(.venv/bin/python -m py_compile app/tools/links_compare.py)",
       "Bash(.venv/bin/python -m py_compile app/config.py app/i18n.py app/tools/links_compare.py app/ui/tool_tabs.py app/ui/main_window.py)",
       "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python /private/tmp/claude-501/-Users-exey-tg-super-admin/d79fa9d2-158e-439c-9043-b9465f5d3190/scratchpad/test_links_ui.py)",
-      "Bash(QT_QPA_PLATFORM=offscreen PYTHONPATH=/Users/exey/tg-super-admin .venv/bin/python /private/tmp/claude-501/-Users-exey-tg-super-admin/d79fa9d2-158e-439c-9043-b9465f5d3190/scratchpad/test_links_ui.py)"
+      "Bash(QT_QPA_PLATFORM=offscreen PYTHONPATH=/Users/exey/tg-super-admin .venv/bin/python /private/tmp/claude-501/-Users-exey-tg-super-admin/d79fa9d2-158e-439c-9043-b9465f5d3190/scratchpad/test_links_ui.py)",
+      "Bash(.venv/bin/python -m py_compile app/ui/tool_tabs.py app/tools/links_compare.py)"
     ]
   }
 }

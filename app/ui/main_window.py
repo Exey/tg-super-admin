@@ -147,7 +147,6 @@ class MainWindow(QMainWindow):
         self.users_extractor_tab.group_b_edit.setText(
             self.cfg.get("USERS_EXTRACTOR_GROUP_B"))
         self.post_replacer_tab.channel_edit.setText(self.cfg.get("CHANNEL_ID"))
-        self.links_compare_tab.md_edit.setText(self.cfg.get("LINKS_COMPARE_MD_PATH"))
         self.links_compare_tab.channel_edit.setText(self.cfg.get("LINKS_COMPARE_CHANNEL"))
 
     # -------------------------------------------------------------- close

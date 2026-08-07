@@ -19,8 +19,8 @@ from ..tools.backup import run_backup
 from ..tools.cleaner import run_cleaner, scan_keep_candidates
 from ..tools.common import reset_progress
 from ..tools.links_compare import (
-    parse_saved_rows, populate_followers, populate_private_channels,
-    scan_channel_links,
+    exclude_by_md, parse_saved_rows, populate_followers,
+    populate_private_channels, scan_channel_links,
 )
 from ..tools.post_image_replacer import run_post_image_replace
 from ..tools.repost import run_repost
@@ -99,24 +99,6 @@ def _image_file_row(parent, line_edit: QLineEdit, browse_text: str) -> QWidget:
 
 
 MD_FILTER = "Markdown (*.md);;All files (*)"
-
-
-def _md_file_row(parent, line_edit: QLineEdit, browse_text: str) -> QWidget:
-    row = QWidget(parent)
-    lay = QHBoxLayout(row)
-    lay.setContentsMargins(0, 0, 0, 0)
-    lay.addWidget(line_edit, stretch=1)
-    btn = QPushButton(browse_text)
-
-    def pick() -> None:
-        path, _ = QFileDialog.getOpenFileName(parent, browse_text,
-                                              line_edit.text() or "", MD_FILTER)
-        if path:
-            line_edit.setText(path)
-
-    btn.clicked.connect(pick)
-    lay.addWidget(btn)
-    return row
 
 
 def parse_id_ranges(text: str) -> list[int]:
@@ -1208,10 +1190,6 @@ class LinksCompareTab(ToolTab):
         self._sort_col = 0            # default: sort by followers
         self._sort_desc = True
 
-        self.md_edit = QLineEdit(self.cfg.get("LINKS_COMPARE_MD_PATH"))
-        self.form.addRow(self.tr_("links_compare_md"),
-                         _md_file_row(self, self.md_edit, self.tr_("browse")))
-
         self.channel_edit = QLineEdit(self.cfg.get("LINKS_COMPARE_CHANNEL"))
         self.form.addRow(self.tr_("links_compare_channel"), self.channel_edit)
 
@@ -1275,8 +1253,13 @@ class LinksCompareTab(ToolTab):
         self.save_md_btn.clicked.connect(self._save_md)
         layout.addWidget(self.save_md_btn)
 
+        self.exclude_md_btn = QPushButton(self.tr_("links_compare_exclude_md_button"))
+        self.exclude_md_btn.clicked.connect(self._exclude_by_md)
+        layout.addWidget(self.exclude_md_btn)
+
     def set_extra_buttons_enabled(self, enabled: bool) -> None:
         self.load_md_btn.setEnabled(enabled)
+        self.exclude_md_btn.setEnabled(enabled)
         self.populate_public_btn.setEnabled(enabled)
         self.populate_private_btn.setEnabled(enabled)
         self.save_md_btn.setEnabled(enabled)
@@ -1337,22 +1320,15 @@ class LinksCompareTab(ToolTab):
 
     # -------------------------------------------------------------- run
     def collect_params(self) -> dict | None:
-        md_path = self.md_edit.text().strip()
         channel = self.channel_edit.text().strip()
-        if md_path and not os.path.isfile(md_path):
-            QMessageBox.warning(self, self.tr_("app_title"),
-                                self.tr_("links_compare_bad_md"))
-            return None
         if not channel:
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("links_compare_channel"))
             return None
-        self.cfg.profile["LINKS_COMPARE_MD_PATH"] = md_path
         self.cfg.profile["LINKS_COMPARE_CHANNEL"] = channel
         self.cfg.save()
         return {
             "channel": channel,
-            "md_path": md_path,
             "scan_limit": self.scan_spin.value(),
         }
 
@@ -1367,7 +1343,6 @@ class LinksCompareTab(ToolTab):
                 self._sort_col, self._sort_desc = 0, True  # default: by followers
                 self._rebuild_table()
                 msg = self.tr_("links_compare_done", n=len(self._rows),
-                               known=data.get("known", 0),
                                scanned=data.get("scanned_links", 0))
             except (ValueError, KeyError):
                 ok = False
@@ -1380,7 +1355,6 @@ class LinksCompareTab(ToolTab):
         self.cfg.save()
         return {
             "rows": self._rows,
-            "md_path": self.md_edit.text().strip(),
             "min_followers": self.min_followers_spin.value(),
             "delay": self.delay_spin.value(),
         }
@@ -1393,7 +1367,7 @@ class LinksCompareTab(ToolTab):
                                     self.tr_("links_compare_empty"))
             return
         if not any(r.get("kind") == "user" and r.get("followers") is None
-                  for r in self._rows):
+                  and not r.get("broken") for r in self._rows):
             QMessageBox.information(self, self.tr_("app_title"),
                                     self.tr_("links_compare_nothing_to_populate"))
             return
@@ -1408,7 +1382,7 @@ class LinksCompareTab(ToolTab):
                                     self.tr_("links_compare_empty"))
             return
         if not any(r.get("kind") == "invite" and r.get("followers") is None
-                  for r in self._rows):
+                  and not r.get("broken") for r in self._rows):
             QMessageBox.information(self, self.tr_("app_title"),
                                     self.tr_("links_compare_nothing_to_populate"))
             return
@@ -1451,6 +1425,22 @@ class LinksCompareTab(ToolTab):
         self._sort_col, self._sort_desc = 0, True  # default: by followers
         self._rebuild_table()
         self.append_log(self.tr_("links_compare_md_loaded", n=len(rows), path=path))
+
+    # ---------------------------------------------------------- exclude md
+    def _exclude_by_md(self) -> None:
+        if self.is_running():
+            return
+        if not self._rows:
+            QMessageBox.information(self, self.tr_("app_title"),
+                                    self.tr_("links_compare_empty"))
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, self.tr_("links_compare_exclude_md_button"), "", MD_FILTER)
+        if not path:
+            return
+        self._rows, removed = exclude_by_md(self._rows, path)
+        self._rebuild_table()
+        self.append_log(self.tr_("links_compare_excluded", n=removed, path=path))
 
     # ------------------------------------------------------------- save md
     def _save_md(self) -> None:

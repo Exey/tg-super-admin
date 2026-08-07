@@ -24,7 +24,6 @@ FIELDS = [
     "REPOST_GROUP_TARGET",  # repost-group target
     "USERS_EXTRACTOR_GROUP_A",  # users extractor: first group to compare
     "USERS_EXTRACTOR_GROUP_B",  # users extractor: second group to compare
-    "LINKS_COMPARE_MD_PATH",  # links compare: known-links .md file
     "LINKS_COMPARE_CHANNEL",  # links compare: channel to scan for new links
     "LINKS_COMPARE_MIN_FOLLOWERS",  # links compare: minimum follower count to report
     "LINKS_COMPARE_DELAY",  # links compare: seconds between each populate lookup
