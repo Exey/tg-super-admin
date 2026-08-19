@@ -92,14 +92,18 @@ class ToolTab(QWidget):
             return False
         return True
 
-    def launch(self, func, params: dict, done_slot=None) -> None:
+    def launch(self, func, params: dict, done_slot=None, partial_slot=None) -> None:
         """Start `func` (an async tool coroutine) in a background worker.
         Shared by on_run and any auxiliary action a subclass adds (e.g. a
         "Count" button) so they get the same login/cancel/log wiring.
 
         done_slot: called with (ok, msg) when the worker finishes, instead of
         the default self.on_done — for actions whose result needs custom
-        handling (e.g. parsing a JSON payload to open a review dialog)."""
+        handling (e.g. parsing a JSON payload to open a review dialog).
+
+        partial_slot: called with a list[dict] whenever the tool calls
+        `ctx.emit_rows(...)` mid-run — for a tab that wants to populate its
+        results table live instead of waiting for the final result."""
         conn = {
             "api_id": self.cfg.get("API_ID").strip(),
             "api_hash": self.cfg.get("API_HASH").strip(),
@@ -111,6 +115,8 @@ class ToolTab(QWidget):
         self.worker.sig_progress.connect(self.on_progress)
         self.worker.sig_done.connect(done_slot or self.on_done)
         self.worker.sig_ask.connect(self.on_ask)
+        if partial_slot:
+            self.worker.sig_rows.connect(partial_slot)
 
         self.run_btn.setEnabled(False)
         self.set_extra_buttons_enabled(False)

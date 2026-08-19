@@ -8,15 +8,20 @@ FloodWait. Doing that inline during a 10k-message scan means one bad request
 can strand the whole run. So:
 
 - `scan_channel_links` — the fast, read-only step. Scans every message for
-  t.me links and returns them all completely unresolved (no network calls
-  beyond the scan itself, so no flood risk regardless of channel size). A
-  channel can be referenced three ways in a post, all detected: a plain
-  "t.me/name" link, a bare "@name" mention, or a category label hyperlinked
-  straight to the channel (the URL never appears as visible text at all —
-  very common in "recommended channels" directory posts) — see
-  `_extract_from_text`. The "tag" for each link is the hyperlink's own
-  visible label when there is one, otherwise the same line's text before
-  the match, or the previous line if that's empty.
+  t.me links (works on a group as well as a channel) and returns them all
+  completely unresolved (no network calls beyond the scan itself, so no
+  flood risk regardless of size). A channel can be referenced three ways in
+  a post, all detected: a plain "t.me/name" link, a bare "@name" mention, or
+  a category label hyperlinked straight to the channel (the URL never
+  appears as visible text at all — very common in "recommended channels"
+  directory posts) — see `_extract_from_text`. The "tag" for each link is
+  the hyperlink's own visible label when there is one, otherwise the same
+  line's text before the match, or the previous line if that's empty.
+  `period` bounds the scan by date (see `PERIOD_DAYS`); `from_users`
+  narrows it to messages sent by specific people in a group, so links can
+  be attributed to particular posters; `include_non_tg` also picks up
+  non-Telegram URLs (`kind: 'external'`) — those are never resolved (no
+  subscriber count exists for an arbitrary web page).
 - `populate_followers` — resolves the scan's `kind: 'user'` rows missing a
   follower count, one at a time (with a delay between each), to get a live
   subscriber count. A row that isn't a real, resolvable channel is kept
@@ -41,6 +46,7 @@ from __future__ import annotations
 import asyncio
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from telethon import errors
@@ -48,6 +54,26 @@ from telethon import errors
 from .common import resolve_entity
 
 HEARTBEAT_EVERY = 500
+ROWS_FLUSH_EVERY = 100  # how often the scan streams newly-found rows to the GUI
+
+# Telegram's history-count endpoint sometimes reports a "we didn't actually
+# compute this" sentinel around INT32_MAX for very large/awkward chats,
+# rather than a real total — anything past this is obviously not a genuine
+# message count, so treat it as unknown instead of showing "scanned 500/2.1B".
+MAX_SANE_TOTAL = 10_000_000
+
+# Period-of-analysis choices offered in the GUI, in calendar days. "all" (and
+# any other unrecognized/empty key) is intentionally absent — period_cutoff()
+# already treats a missing key as "no limit".
+PERIOD_DAYS = {"1m": 30, "3m": 90, "6m": 182, "1y": 365}
+
+
+def period_cutoff(period: str) -> datetime | None:
+    """UTC cutoff for a period key, or None for "all" / an unrecognized or
+    empty key (meaning "no limit" — scan the whole channel/group)."""
+    days = PERIOD_DAYS.get(period)
+    return datetime.now(timezone.utc) - timedelta(days=days) if days else None
+
 
 # `(?<![\w.])` rejects domains that merely *end* in "t.me" (e.g. "start.me/x"
 # would otherwise match "t.me/x" as a substring) by requiring the char right
@@ -62,6 +88,11 @@ MENTION_RE = re.compile(r"(?<![\w@])@([A-Za-z][A-Za-z0-9_]{3,31})\b")
 # which is exactly the "category text hyperlinked straight to the channel"
 # shape a directory post uses.
 MD_LINK_RE = re.compile(r"\[([^\[\]]*)\]\((https?://[^\s)]+)\)")
+# Any http(s) URL that *isn't* a t.me link (excluded via the lookahead, so it
+# never double-matches what LINK_RE already caught) — only used when
+# include_non_tg is on.
+GENERIC_URL_RE = re.compile(
+    r"(?<![\w])https?://(?!(?:www\.)?t\.me/)[^\s<>\)\]]+", re.IGNORECASE)
 
 _SKIP_FIRST_SEGMENTS = {"s", "iv", "share", "addstickers", "addemoji", "addtheme",
                         "proxy", "socks", "c", "boost"}
@@ -95,14 +126,18 @@ def _tag_from_context(lines: list[str], line_idx: int, before_text: str) -> str:
     return ""
 
 
-def _extract_from_text(text: str) -> list[tuple[str, str, str]]:
-    """[(normalized_link, kind, tag), ...] in order of appearance, combining:
+def _extract_from_text(text: str, include_non_tg: bool = False) -> list[tuple[str, str, str]]:
+    """[(link, kind, tag), ...] in order of appearance, combining:
     - rendered hyperlinks `[label](url)` — a directory post's "category text
       linked straight to the channel" shape, where the URL never appears as
       literal text at all;
     - bare `@username` mentions;
-    - plain literal t.me/ links.
-    `tag` is the hyperlink's own visible label, or (for the other two) the
+    - plain literal t.me/ links;
+    - (when `include_non_tg`) any other http(s) URL, kind='external' — its
+      `link` is the full raw URL rather than a normalized "t.me/..." form,
+      and it's never resolved (no follower count is possible for a non-
+      Telegram page).
+    `tag` is the hyperlink's own visible label, or (for the other three) the
     same line's text before the match, or the previous line if that's empty.
     """
     if not text:
@@ -113,20 +148,24 @@ def _extract_from_text(text: str) -> list[tuple[str, str, str]]:
     # and newlines intact) so pass 2 doesn't also match the url text inside.
     masked = list(text)
     for m in MD_LINK_RE.finditer(text):
-        link_m = LINK_RE.search(m.group(2))
+        url = m.group(2)
+        link_m = LINK_RE.search(url)
+        tag = " ".join(m.group(1).split())
         if link_m:
             parsed = _parse_link(link_m.group(1))
             if parsed:
                 norm, kind = parsed
-                tag = " ".join(m.group(1).split())
                 out.append((norm, kind, tag))
+        elif include_non_tg:
+            out.append((url, "external", tag))
         for i in range(m.start(), m.end()):
             if masked[i] != "\n":
                 masked[i] = " "
     masked_text = "".join(masked)
     lines = masked_text.split("\n")
 
-    # 2) Bare @mentions and plain literal t.me/ links in what's left.
+    # 2) Bare @mentions, plain literal t.me/ links, and (if enabled) any
+    # other URL in what's left.
     for i, line in enumerate(lines):
         for m in LINK_RE.finditer(line):
             parsed = _parse_link(m.group(1))
@@ -137,10 +176,14 @@ def _extract_from_text(text: str) -> list[tuple[str, str, str]]:
         for m in MENTION_RE.finditer(line):
             norm = f"t.me/{m.group(1).lower()}"
             out.append((norm, "user", _tag_from_context(lines, i, line[: m.start()])))
+        if include_non_tg:
+            for m in GENERIC_URL_RE.finditer(line):
+                out.append((m.group(0), "external",
+                           _tag_from_context(lines, i, line[: m.start()])))
     return out
 
 
-def _extract_links_with_tags(msg) -> list[tuple[str, str, str]]:
+def _extract_links_with_tags(msg, include_non_tg: bool = False) -> list[tuple[str, str, str]]:
     """Same as `_extract_from_text`, but prefers the message's markdown-
     rendered `.text` (falls back to the raw `.message`) so links hidden
     behind a hyperlinked label are found too, not just literal "t.me/..."
@@ -148,7 +191,7 @@ def _extract_links_with_tags(msg) -> list[tuple[str, str, str]]:
     text = getattr(msg, "text", None)
     if text is None:
         text = getattr(msg, "message", "") or ""
-    return _extract_from_text(text)
+    return _extract_from_text(text, include_non_tg)
 
 
 def _split_md_row(line: str) -> list[str] | None:
@@ -239,12 +282,15 @@ def parse_saved_rows(path: str) -> list[dict]:
         if followers_text.lower() == "followers" or (
                 followers_text and set(followers_text) <= {"-", ":"}):
             continue  # header / separator row
-        if not link.startswith("t.me/"):
+        if link.startswith("t.me/"):
+            parsed = _parse_link(link.split("t.me/", 1)[-1])
+            if not parsed:
+                continue
+            norm, kind = parsed
+        elif link.startswith(("http://", "https://")):
+            norm, kind = link, "external"
+        else:
             continue
-        parsed = _parse_link(link.split("t.me/", 1)[-1])
-        if not parsed:
-            continue
-        norm, kind = parsed
         broken = followers_text == "❌"
         followers = int(followers_text) if followers_text.isdigit() else None
         rows.append({"link": norm, "tag": tag, "kind": kind,
@@ -272,39 +318,95 @@ def exclude_by_md(rows: list[dict], md_path: str) -> tuple[list[dict], int]:
     return kept, removed
 
 
+async def _count_since(client, entity, cutoff: datetime | None) -> int:
+    """Server-computed message count (no per-message fetching) for an
+    accurate progress-bar total: one call to find the ID right before the
+    cutoff (`offset_date` is exclusive — "messages previous to this date"),
+    one to count everything newer than that ID."""
+    if cutoff is None:
+        return (await client.get_messages(entity, limit=0)).total or 0
+    boundary = await client.get_messages(entity, limit=1, offset_date=cutoff)
+    min_id = boundary[0].id if boundary else 0
+    return (await client.get_messages(entity, limit=0, min_id=min_id)).total or 0
+
+
+async def _resolve_target_ids(client, raw: str, ctx) -> set[int]:
+    """Resolves a comma/whitespace-separated list of @usernames/IDs to their
+    numeric user IDs, for filtering a scan down to specific posters. An
+    entry that can't be resolved is logged and skipped rather than aborting
+    the whole scan."""
+    ids: set[int] = set()
+    for token in re.split(r"[,\s]+", raw.strip()):
+        if not token:
+            continue
+        try:
+            entity = await resolve_entity(client, token)
+            ids.add(entity.id)
+        except Exception as e:
+            ctx.log(f"  Could not resolve user '{token}': {e}")
+    return ids
+
+
 async def scan_channel_links(client, p: dict, ctx) -> str:
-    """p: channel, scan_limit (0 = all). Read-only: no per-link network
-    calls, so this is safe to run on any size of channel regardless of
-    flood limits."""
+    """p: channel, period (PERIOD_DAYS key, '' = all time), from_users
+    (optional — comma/whitespace-separated @usernames or IDs; when given,
+    only messages sent by these users are scanned, so links can be
+    attributed to specific posters in a group), include_non_tg (bool —
+    also extract non-Telegram URLs, kind='external', never resolved).
+    Read-only: no per-link network calls beyond resolving `from_users`, so
+    this is safe to run on any size of channel/group regardless of flood
+    limits."""
     entity = await resolve_entity(client, p["channel"])
     title = str(getattr(entity, "title", p["channel"]))
-    scan_limit = int(p.get("scan_limit") or 0)
+    cutoff = period_cutoff(p.get("period") or "")
+    include_non_tg = bool(p.get("include_non_tg"))
+
+    target_ids: set[int] = set()
+    from_users = (p.get("from_users") or "").strip()
+    if from_users:
+        target_ids = await _resolve_target_ids(client, from_users, ctx)
+        if not target_ids:
+            ctx.log("  None of the given users could be resolved — scanning every sender instead.")
+        else:
+            ctx.log(f"Only scanning messages from {len(target_ids)} user(s).")
+
     try:
-        total = (await client.get_messages(entity, limit=0)).total or 0
+        total = await _count_since(client, entity, cutoff)
     except Exception:
         total = 0
-    if scan_limit:
-        total = min(total, scan_limit) if total else scan_limit
-    ctx.log(f"Scanning '{title}' for t.me links…")
+    if total > MAX_SANE_TOTAL:
+        total = 0  # bogus sentinel from the server — show "?" instead
+    ctx.log(f"Scanning '{title}' for links…")
+
+    def row(norm: str, info: dict) -> dict:
+        return {"link": norm, "tag": info["tag"], "kind": info["kind"],
+               "followers": None, "id": None, "broken": False}
 
     found: dict[str, dict] = {}
+    flushed = 0
     scanned = 0
-    async for msg in client.iter_messages(entity, limit=scan_limit or None):
+    async for msg in client.iter_messages(entity):
         if ctx.cancelled():
             break
+        if cutoff and msg.date and msg.date < cutoff:
+            break  # iter_messages is newest -> oldest, so we're done
         scanned += 1
-        for norm, kind, tag in _extract_links_with_tags(msg):
-            if norm not in found:
-                found[norm] = {"kind": kind, "tag": tag}
+        if not target_ids or getattr(msg, "sender_id", None) in target_ids:
+            for norm, kind, tag in _extract_links_with_tags(msg, include_non_tg):
+                if norm not in found:
+                    found[norm] = {"kind": kind, "tag": tag}
         if scanned % HEARTBEAT_EVERY == 0:
             ctx.log(f"  scanned {scanned}/{total or '?'}…")
+        if scanned % ROWS_FLUSH_EVERY == 0 and len(found) > flushed:
+            new_items = list(found.items())[flushed:]
+            ctx.emit_rows([row(norm, info) for norm, info in new_items])
+            flushed = len(found)
         ctx.progress(scanned, total)
 
-    rows = [
-        {"link": norm, "tag": info["tag"], "kind": info["kind"],
-         "followers": None, "id": None, "broken": False}
-        for norm, info in sorted(found.items())
-    ]
+    if len(found) > flushed:
+        ctx.emit_rows([row(norm, info) for norm, info in list(found.items())[flushed:]])
+
+    rows = [row(norm, info) for norm, info in sorted(found.items())]
     ctx.log(f"Found {len(rows)} unique link(s) in '{title}'.")
 
     return json.dumps({

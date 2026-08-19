@@ -225,16 +225,26 @@ EN = {
                             "image or new text on a row.",
     "post_replacer_bad_image": "Image file not found: {path}",
     # links compare
-    "links_compare_help": "Run scans a channel for links to other channels "
-                          "(t.me/ links, @mentions, or hyperlinked names) — "
-                          "fast, no per-link requests. Count Followers for "
-                          "Public/Private Ch. then resolve those one at a "
-                          "time to get a live subscriber count (flood-safe: "
-                          "if it stops early, just click it again later). "
-                          "Save/Load MD round-trip the table. Exclude links "
-                          "by MD removes rows matching a known-links file.",
-    "links_compare_channel": "Channel to scan for links",
-    "links_compare_scan_limit": "Scan at most N posts (0 = all)",
+    "links_compare_help": "Run scans a channel or group for links to other "
+                          "channels (t.me/ links, @mentions, or hyperlinked "
+                          "names) — fast, no per-link requests. \"Only from "
+                          "user(s)\" narrows a group scan to specific "
+                          "posters. Count Followers for Public/Private Ch. "
+                          "then resolve those one at a time to get a live "
+                          "subscriber count (flood-safe: if it stops early, "
+                          "just click it again later). Save/Load MD round-"
+                          "trip the table. Exclude links by MD removes rows "
+                          "matching a known-links file.",
+    "links_compare_channel": "Channel or group to scan for links",
+    "links_compare_from_users": "Only from user(s)",
+    "links_compare_from_users_placeholder": "optional — @username or ID, comma-separated",
+    "links_compare_period": "Period of analysis",
+    "period_1m": "Last month",
+    "period_3m": "3 months",
+    "period_6m": "6 months",
+    "period_1y": "1 year",
+    "period_all": "All time",
+    "links_compare_include_non_tg": "Also extract non-Telegram links",
     "links_compare_delay": "Delay between populate lookups (s)",
     "links_compare_min_followers": "Min followers (0 = no minimum)",
     "links_compare_col_followers": "Followers",
@@ -479,10 +489,12 @@ RU = {
                              "или текст хотя бы в одной строке.",
     "post_replacer_bad_image": "Файл картинки не найден: {path}",
     # links compare
-    "links_compare_help": "«Запустить» сканирует канал на ссылки на другие "
-                          "каналы (t.me/ ссылки, @упоминания, текст-"
-                          "гиперссылка) — быстро, без запросов по отдельным "
-                          "ссылкам. «Подсчитать подписчиков (публ./приват.)» "
+    "links_compare_help": "«Запустить» сканирует канал или группу на ссылки "
+                          "на другие каналы (t.me/ ссылки, @упоминания, "
+                          "текст-гиперссылка) — быстро, без запросов по "
+                          "отдельным ссылкам. «Только от пользователя(ей)» "
+                          "сужает сканирование группы до конкретных "
+                          "авторов. «Подсчитать подписчиков (публ./приват.)» "
                           "затем резолвит их по одной, чтобы получить "
                           "текущее число подписчиков (защита от флуда: если "
                           "остановилось раньше времени — просто нажмите "
@@ -490,8 +502,16 @@ RU = {
                           "MD» сохраняют и читают таблицу обратно. "
                           "«Исключить ссылки по MD» убирает строки, "
                           "совпадающие с файлом известных ссылок.",
-    "links_compare_channel": "Канал для сканирования ссылок",
-    "links_compare_scan_limit": "Сканировать не более N постов (0 = все)",
+    "links_compare_channel": "Канал или группа для сканирования ссылок",
+    "links_compare_from_users": "Только от пользователя(ей)",
+    "links_compare_from_users_placeholder": "необязательно — @username или ID через запятую",
+    "links_compare_period": "Период анализа",
+    "period_1m": "Последний месяц",
+    "period_3m": "3 месяца",
+    "period_6m": "6 месяцев",
+    "period_1y": "1 год",
+    "period_all": "Всё время",
+    "links_compare_include_non_tg": "Также извлекать не-Telegram ссылки",
     "links_compare_delay": "Задержка между запросами (с)",
     "links_compare_min_followers": "Мин. подписчиков (0 = без ограничения)",
     "links_compare_col_followers": "Подписчики",

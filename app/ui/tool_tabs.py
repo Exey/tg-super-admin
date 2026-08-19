@@ -1193,9 +1193,28 @@ class LinksCompareTab(ToolTab):
         self.channel_edit = QLineEdit(self.cfg.get("LINKS_COMPARE_CHANNEL"))
         self.form.addRow(self.tr_("links_compare_channel"), self.channel_edit)
 
-        self.scan_spin = QSpinBox()
-        self.scan_spin.setRange(0, MAX_ID)
-        self.form.addRow(self.tr_("links_compare_scan_limit"), self.scan_spin)
+        # Always starts empty (not persisted) — a "just this once" filter,
+        # not something you'd usually want to carry over into the next scan.
+        self.from_users_edit = QLineEdit()
+        self.from_users_edit.setPlaceholderText(
+            self.tr_("links_compare_from_users_placeholder"))
+        self.form.addRow(self.tr_("links_compare_from_users"), self.from_users_edit)
+
+        self._period_keys = ["1m", "3m", "6m", "1y", "all"]
+        self.period_combo = QComboBox()
+        self.period_combo.addItems([
+            self.tr_("period_1m"), self.tr_("period_3m"), self.tr_("period_6m"),
+            self.tr_("period_1y"), self.tr_("period_all"),
+        ])
+        saved_period = self.cfg.get("LINKS_COMPARE_PERIOD")
+        if saved_period in self._period_keys:
+            self.period_combo.setCurrentIndex(self._period_keys.index(saved_period))
+        self.form.addRow(self.tr_("links_compare_period"), self.period_combo)
+
+        self.include_non_tg_check = QCheckBox(self.tr_("links_compare_include_non_tg"))
+        self.include_non_tg_check.setChecked(
+            self.cfg.get("LINKS_COMPARE_INCLUDE_NON_TG") == "1")
+        self.form.addRow("", self.include_non_tg_check)
 
         self.delay_spin = QDoubleSpinBox()
         self.delay_spin.setRange(0.5, 30.0)
@@ -1264,12 +1283,18 @@ class LinksCompareTab(ToolTab):
         self.populate_private_btn.setEnabled(enabled)
         self.save_md_btn.setEnabled(enabled)
 
+    @staticmethod
+    def _link_url(link: str) -> str:
+        """t.me links are stored without a protocol ("t.me/x"); external
+        (non-Telegram) links keep their own full URL as-is."""
+        return link if link.startswith(("http://", "https://")) else f"https://{link}"
+
     def _open_row(self, row: int, col: int) -> None:
         if col != 1:
             return
         item = self.table.item(row, 1)
         if item and item.text():
-            QDesktopServices.openUrl(QUrl(f"https://{item.text()}"))
+            QDesktopServices.openUrl(QUrl(self._link_url(item.text())))
 
     # ------------------------------------------------------------- sorting
     def _on_header_clicked(self, col: int) -> None:
@@ -1313,33 +1338,63 @@ class LinksCompareTab(ToolTab):
         for i, r in enumerate(rows):
             self.table.setItem(i, 0, QTableWidgetItem(self._followers_text(r)))
             link_item = QTableWidgetItem(r.get("link", ""))
-            link_item.setToolTip(f"https://{r.get('link', '')}")
+            link_item.setToolTip(self._link_url(r.get("link", "")))
             self.table.setItem(i, 1, link_item)
             self.table.setItem(i, 2, QTableWidgetItem(r.get("tag", "")))
         self._update_sort_indicator()
 
     # -------------------------------------------------------------- run
+    def _current_period(self) -> str:
+        return self._period_keys[self.period_combo.currentIndex()]
+
     def collect_params(self) -> dict | None:
         channel = self.channel_edit.text().strip()
         if not channel:
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("links_compare_channel"))
             return None
+        from_users = self.from_users_edit.text().strip()
+        period = self._current_period()
         self.cfg.profile["LINKS_COMPARE_CHANNEL"] = channel
+        self.cfg.profile["LINKS_COMPARE_PERIOD"] = period
+        self.cfg.profile["LINKS_COMPARE_INCLUDE_NON_TG"] = (
+            "1" if self.include_non_tg_check.isChecked() else "0")
         self.cfg.save()
         return {
             "channel": channel,
-            "scan_limit": self.scan_spin.value(),
+            "period": period,
+            "from_users": from_users,
+            "include_non_tg": self.include_non_tg_check.isChecked(),
         }
 
     def tool_func(self):
         return scan_channel_links
 
+    def on_run(self) -> None:
+        if self.is_running() or not self.check_conn():
+            return
+        params = self.collect_params()
+        if params is None:
+            return
+        self._rows = []
+        self._rebuild_table()
+        self.launch(scan_channel_links, params, partial_slot=self._on_partial_rows)
+
+    def _on_partial_rows(self, new_rows: list) -> None:
+        """Populates the table live during a scan (`ctx.emit_rows(...)`),
+        instead of only showing results once the whole run finishes."""
+        existing = {r["link"] for r in self._rows}
+        for r in new_rows:
+            if r["link"] not in existing:
+                self._rows.append(r)
+                existing.add(r["link"])
+        self._rebuild_table()
+
     def on_done(self, ok: bool, msg: str) -> None:
         if ok:
             try:
                 data = json.loads(msg)
-                self._rows = data["rows"]
+                self._rows = data["rows"]  # authoritative final set, replaces the streamed rows
                 self._sort_col, self._sort_desc = 0, True  # default: by followers
                 self._rebuild_table()
                 msg = self.tr_("links_compare_done", n=len(self._rows),

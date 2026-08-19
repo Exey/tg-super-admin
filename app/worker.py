@@ -29,6 +29,13 @@ class Ctx:
         # total == 0 -> indeterminate
         self._w.sig_progress.emit(int(done), int(total))
 
+    def emit_rows(self, rows: list) -> None:
+        """Stream a batch of freshly-found result rows to the GUI mid-run,
+        for tools whose tab wants to populate its table live instead of
+        waiting for the final result. No-op for tools/tabs that don't wire
+        up a partial_slot in launch()."""
+        self._w.sig_rows.emit(rows)
+
     def cancelled(self) -> bool:
         return self._w.cancel_requested
 
@@ -67,6 +74,7 @@ class _AskThread(QThread):
 class ToolWorker(_AskThread):
     sig_log = Signal(str)
     sig_progress = Signal(int, int)         # done, total (0 = unknown)
+    sig_rows = Signal(object)               # list[dict] of newly-found rows
     sig_done = Signal(bool, str)            # ok, message
 
     def __init__(self, tool_func, params: dict, conn: dict, parent=None) -> None:
