@@ -13,6 +13,7 @@ EN = {
     "tab_users_extractor": "🧮 Users diff",
     "tab_post_replacer": "🖼 Post replacer",
     "tab_links_compare": "🔗 Links extract",
+    "tab_chat_activity": "📈 Chat activity",
     # generic
     "run": "▶ Run",
     "stop": "⏹ Stop",
@@ -270,6 +271,21 @@ EN = {
                                    "the follower minimum).",
     "links_compare_populate_stopped": "Stopped early — resolved {resolved}, "
                                       "dropped {dropped} so far. {reason}",
+    # chat activity
+    "chat_activity_help": "Reads a Telegram Desktop chat export (Export "
+                          "chat history → JSON) — a local file, no "
+                          "Telegram login needed. Reports how many distinct "
+                          "senders posted at least once in the last week / "
+                          "month / 3 months / 6 months / year / all time, "
+                          "plus a list of everyone who only ever sent "
+                          "exactly one message.",
+    "chat_activity_json_path": "Chat export .json file",
+    "chat_activity_bad_path": "Pick a valid chat export .json file first.",
+    "chat_activity_generate_button": "📊 Generate Report",
+    "chat_activity_save_md_button": "💾 Save MD",
+    "chat_activity_report_preview": "Report",
+    "chat_activity_done": "{senders} sender(s) found, {one} with exactly one message.",
+    "chat_activity_md_saved": "Saved: {path}",
 }
 
 RU = {
@@ -283,6 +299,7 @@ RU = {
     "tab_users_extractor": "🧮 Разница юзеров",
     "tab_post_replacer": "🖼 Замена в постах",
     "tab_links_compare": "🔗 Извлечение ссылок",
+    "tab_chat_activity": "📈 Активность чата",
     "run": "▶ Запустить",
     "stop": "⏹ Остановить",
     "browse": "Обзор…",
@@ -538,6 +555,21 @@ RU = {
                                    "минимума подписчиков).",
     "links_compare_populate_stopped": "Остановлено раньше времени — обработано "
                                       "{resolved}, отброшено {dropped}. {reason}",
+    # chat activity
+    "chat_activity_help": "Читает экспорт чата из Telegram Desktop (Экспорт "
+                          "истории чата → JSON) — локальный файл, вход в "
+                          "Telegram не нужен. Показывает, сколько разных "
+                          "участников написали хотя бы одно сообщение за "
+                          "последнюю неделю / месяц / 3 месяца / 6 месяцев "
+                          "/ год / всё время, а также список всех, кто "
+                          "написал ровно одно сообщение.",
+    "chat_activity_json_path": "Файл экспорта чата .json",
+    "chat_activity_bad_path": "Сначала выберите корректный файл экспорта чата .json.",
+    "chat_activity_generate_button": "📊 Сформировать отчёт",
+    "chat_activity_save_md_button": "💾 Сохранить MD",
+    "chat_activity_report_preview": "Отчёт",
+    "chat_activity_done": "Найдено участников: {senders}, с одним сообщением: {one}.",
+    "chat_activity_md_saved": "Сохранено: {path}",
 }
 
 LANGS = {"en": EN, "ru": RU}

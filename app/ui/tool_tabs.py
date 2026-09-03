@@ -9,13 +9,15 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
-    QDialogButtonBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QHeaderView,
-    QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu,
-    QMessageBox, QPushButton, QRadioButton, QSizePolicy, QSpinBox,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QDialogButtonBox, QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout,
+    QHeaderView, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem,
+    QMenu, QMessageBox, QPlainTextEdit, QProgressBar, QPushButton,
+    QRadioButton, QSizePolicy, QSpinBox, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from ..tools.backup import run_backup
+from ..tools.chat_activity import PERIODS, run_chat_activity
 from ..tools.cleaner import run_cleaner, scan_keep_candidates
 from ..tools.common import reset_progress
 from ..tools.links_compare import (
@@ -27,6 +29,7 @@ from ..tools.repost import run_repost
 from ..tools.repost_group import count_repost_group, run_repost_group
 from ..tools.restore import run_restore
 from ..tools.users_extractor import run_users_extractor
+from ..worker import LocalTaskWorker
 from .base_tab import ToolTab
 
 MAX_ID = 2_147_483_647
@@ -99,6 +102,26 @@ def _image_file_row(parent, line_edit: QLineEdit, browse_text: str) -> QWidget:
 
 
 MD_FILTER = "Markdown (*.md);;All files (*)"
+JSON_FILTER = "JSON (*.json);;All files (*)"
+
+
+def _open_file_row(parent, line_edit: QLineEdit, browse_text: str,
+                   file_filter: str) -> QWidget:
+    row = QWidget(parent)
+    lay = QHBoxLayout(row)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.addWidget(line_edit, stretch=1)
+    btn = QPushButton(browse_text)
+
+    def pick() -> None:
+        path, _ = QFileDialog.getOpenFileName(parent, browse_text,
+                                              line_edit.text() or "", file_filter)
+        if path:
+            line_edit.setText(path)
+
+    btn.clicked.connect(pick)
+    lay.addWidget(btn)
+    return row
 
 
 def parse_id_ranges(text: str) -> list[int]:
@@ -1529,4 +1552,174 @@ class LinksCompareTab(ToolTab):
             tag = (r.get("tag") or "").replace("|", "\\|").replace("\n", " ").strip()
             lines.append(f"|{followers_text}|{link}|{tag}|")
         return "\n".join(lines) + "\n"
+
+
+# ============================================================ Chat activity
+
+class ChatActivityTab(QWidget):
+    """Analyzes a local Telegram Desktop chat export (result.json) for
+    sender activity. Deliberately *not* a ToolTab — this needs no Telegram
+    connection at all, so it gets its own minimal Run/Stop/log/progress
+    wiring around `LocalTaskWorker` instead of the login-first machinery
+    every other tab shares."""
+
+    def __init__(self, cfg, i18n, parent=None) -> None:
+        super().__init__(parent)
+        self.cfg = cfg
+        self.i18n = i18n
+        self.worker: LocalTaskWorker | None = None
+        self._summary: dict | None = None
+
+        root = QVBoxLayout(self)
+
+        help_label = QLabel(self.tr_("chat_activity_help"))
+        help_label.setWordWrap(True)
+        help_label.setStyleSheet("color: palette(placeholder-text);")
+        root.addWidget(help_label)
+
+        form = QFormLayout()
+        root.addLayout(form)
+
+        self.path_edit = QLineEdit(self.cfg.get("CHAT_ACTIVITY_JSON_PATH"))
+        form.addRow(self.tr_("chat_activity_json_path"),
+                   _open_file_row(self, self.path_edit, self.tr_("browse"), JSON_FILTER))
+
+        buttons = QHBoxLayout()
+        self.run_btn = QPushButton(self.tr_("chat_activity_generate_button"))
+        self.run_btn.clicked.connect(self._generate)
+        buttons.addWidget(self.run_btn)
+        self.stop_btn = QPushButton(self.tr_("stop"))
+        self.stop_btn.setEnabled(False)
+        self.stop_btn.clicked.connect(self._stop)
+        buttons.addWidget(self.stop_btn)
+        self.save_md_btn = QPushButton(self.tr_("chat_activity_save_md_button"))
+        self.save_md_btn.setEnabled(False)
+        self.save_md_btn.clicked.connect(self._save_md)
+        buttons.addWidget(self.save_md_btn)
+        buttons.addStretch()
+        root.addLayout(buttons)
+
+        self.progress = QProgressBar()
+        self.progress.setValue(0)
+        root.addWidget(self.progress)
+
+        root.addWidget(QLabel(self.tr_("log")))
+        self.log_view = QPlainTextEdit()
+        self.log_view.setReadOnly(True)
+        self.log_view.setMaximumBlockCount(5000)
+        self.log_view.setMaximumHeight(120)
+        root.addWidget(self.log_view)
+
+        root.addWidget(QLabel(self.tr_("chat_activity_report_preview")))
+        self.report_view = QPlainTextEdit()
+        self.report_view.setReadOnly(True)
+        root.addWidget(self.report_view, stretch=1)
+
+    def tr_(self, key: str, **kw) -> str:
+        return self.i18n.tr(key, **kw)
+
+    # -------------------------------------------------------------- run
+    def is_running(self) -> bool:
+        return self.worker is not None and self.worker.isRunning()
+
+    def _generate(self) -> None:
+        if self.is_running():
+            return
+        path = self.path_edit.text().strip()
+        if not path or not os.path.isfile(path):
+            QMessageBox.warning(self, self.tr_("app_title"),
+                                self.tr_("chat_activity_bad_path"))
+            return
+        self.cfg.profile["CHAT_ACTIVITY_JSON_PATH"] = path
+        self.cfg.save()
+
+        self.report_view.clear()
+        self.log_view.clear()
+        self.save_md_btn.setEnabled(False)
+        self.worker = LocalTaskWorker(run_chat_activity, {"path": path}, parent=self)
+        self.worker.sig_log.connect(self._append_log)
+        self.worker.sig_progress.connect(self._on_progress)
+        self.worker.sig_done.connect(self._on_done)
+        self.run_btn.setEnabled(False)
+        self.stop_btn.setEnabled(True)
+        self.progress.setRange(0, 0)  # busy until the first progress signal
+        self.worker.start()
+
+    def _stop(self) -> None:
+        if self.worker:
+            self._append_log(self.tr_("cancelled"))
+            self.worker.request_cancel()
+            self.stop_btn.setEnabled(False)
+
+    def _append_log(self, msg: str) -> None:
+        self.log_view.appendPlainText(msg)
+
+    def _on_progress(self, done: int, total: int) -> None:
+        if total > 0:
+            self.progress.setRange(0, total)
+            self.progress.setValue(done)
+        else:
+            self.progress.setRange(0, 0)
+
+    def _on_done(self, ok: bool, msg: str) -> None:
+        if ok:
+            try:
+                self._summary = json.loads(msg)
+                self.report_view.setPlainText(self._build_report_md())
+                self.save_md_btn.setEnabled(True)
+                msg = self.tr_("chat_activity_done",
+                               senders=self._summary["total_senders"],
+                               one=len(self._summary["one_message_users"]))
+            except (ValueError, KeyError):
+                ok = False
+        self._append_log(self.tr_("done_ok" if ok else "done_fail", msg=msg))
+        self.run_btn.setEnabled(True)
+        self.stop_btn.setEnabled(False)
+        if self.progress.maximum() == 0:
+            self.progress.setRange(0, 1)
+            self.progress.setValue(1 if ok else 0)
+        self.worker = None
+
+    # ------------------------------------------------------------- report
+    def _build_report_md(self) -> str:
+        """Plain, unlocalized English structure — matches how every other
+        exported .md in this app is built, independent of the UI language."""
+        s = self._summary
+        lines = [f"# Chat Activity Report — {s['chat_name']}", ""]
+        lines.append(f"Total entries: {s['total_entries']} · "
+                     f"Authored messages: {s['total_authored']} · "
+                     f"Unique senders: {s['total_senders']}")
+        lines.append("")
+        lines.append("## Active senders by period")
+        lines.append("")
+        lines.append("| Period | Active users |")
+        lines.append("|---|---|")
+        for key, label, _days in PERIODS:
+            lines.append(f"| {label} | {s['active_by_period'][key]} |")
+        lines.append("")
+        one = s["one_message_users"]
+        lines.append(f"## Users with exactly 1 message — {len(one)}")
+        lines.append("")
+        lines.append("| Name | ID |")
+        lines.append("|---|---|")
+        for u in one:
+            name = (u.get("name") or "").replace("|", "\\|")
+            lines.append(f"| {name} | {u['id']} |")
+        return "\n".join(lines) + "\n"
+
+    def _save_md(self) -> None:
+        if not self._summary:
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, self.tr_("chat_activity_save_md_button"), "chat_activity.md",
+            "Markdown (*.md)")
+        if not path:
+            return
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self._build_report_md())
+        except OSError as exc:
+            QMessageBox.warning(self, self.tr_("app_title"), str(exc))
+            return
+        self._append_log(self.tr_("chat_activity_md_saved", path=path))
 

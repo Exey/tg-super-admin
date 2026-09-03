@@ -122,6 +122,54 @@ class ToolWorker(_AskThread):
             await client.disconnect()
 
 
+class LocalCtx:
+    """Callbacks handed to a local (non-Telegram) tool function — same
+    log/progress/cancelled shape as `Ctx`, minus anything that assumes a
+    live client."""
+
+    def __init__(self, worker: "LocalTaskWorker") -> None:
+        self._w = worker
+
+    def log(self, msg: str) -> None:
+        self._w.sig_log.emit(str(msg))
+
+    def progress(self, done: int, total: int) -> None:
+        self._w.sig_progress.emit(int(done), int(total))
+
+    def cancelled(self) -> bool:
+        return self._w.cancel_requested
+
+
+class LocalTaskWorker(QThread):
+    """Runs a plain, synchronous, Telegram-free callable in a background
+    thread — for tools that only touch local files (e.g. Chat Activity's
+    JSON export analysis) and have no business requiring a Telegram login
+    at all, unlike every other tool in this app."""
+
+    sig_log = Signal(str)
+    sig_progress = Signal(int, int)
+    sig_done = Signal(bool, str)
+
+    def __init__(self, func, params: dict, parent=None) -> None:
+        """func(params: dict, ctx: LocalCtx) -> str"""
+        super().__init__(parent)
+        self.func = func
+        self.params = params
+        self.cancel_requested = False
+
+    def request_cancel(self) -> None:
+        self.cancel_requested = True
+
+    def run(self) -> None:  # QThread entry
+        ctx = LocalCtx(self)
+        try:
+            result = self.func(self.params, ctx)
+            self.sig_done.emit(not self.cancel_requested, result or "")
+        except Exception as exc:  # noqa: BLE001 - surfaced to the GUI log
+            self.sig_log.emit(traceback.format_exc())
+            self.sig_done.emit(False, str(exc))
+
+
 class CheckLoginWorker(QThread):
     """Connects with the stored session and reports whether it's authorized."""
 

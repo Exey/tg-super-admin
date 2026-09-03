@@ -29,6 +29,7 @@ FIELDS = [
     "LINKS_COMPARE_INCLUDE_NON_TG",  # links compare: "1" to also extract non-Telegram URLs
     "LINKS_COMPARE_MIN_FOLLOWERS",  # links compare: minimum follower count to report
     "LINKS_COMPARE_DELAY",  # links compare: seconds between each populate lookup
+    "CHAT_ACTIVITY_JSON_PATH",  # chat activity: last-used export .json file
 ]
 
 # Only these are shown on the Config tab; the rest live on their tool tabs.
