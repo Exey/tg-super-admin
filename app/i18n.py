@@ -260,8 +260,10 @@ EN = {
     "links_compare_empty": "Run the scan first — no links found yet.",
     "links_compare_nothing_to_populate": "Nothing left to populate — every "
                                          "matching link already has a result.",
-    "links_compare_load_md_empty": "That file has no rows in the |Followers|"
-                                   "t.me/ link|tag| format Save MD writes.",
+    "links_compare_load_md_empty": "Couldn't find any usable rows in that "
+                                   "file — expected either Save MD's own "
+                                   "format, or a known-links table/checklist "
+                                   "with an @username column.",
     "links_compare_md_loaded": "Loaded {n} row(s) from {path}",
     "links_compare_md_saved": "Saved: {path}",
     "links_compare_excluded": "Excluded {n} link(s) matching {path}",
@@ -543,9 +545,10 @@ RU = {
     "links_compare_empty": "Сначала запустите сканирование — ссылок пока нет.",
     "links_compare_nothing_to_populate": "Обрабатывать больше нечего — у всех "
                                          "подходящих ссылок уже есть результат.",
-    "links_compare_load_md_empty": "В этом файле нет строк в формате "
-                                   "|Followers|t.me/ link|tag|, который "
-                                   "пишет «Сохранить MD».",
+    "links_compare_load_md_empty": "Не удалось найти подходящие строки в "
+                                   "этом файле — ожидается либо формат "
+                                   "«Сохранить MD», либо таблица/чек-лист "
+                                   "известных ссылок со столбцом @username.",
     "links_compare_md_loaded": "Загружено {n} строк из {path}",
     "links_compare_md_saved": "Сохранено: {path}",
     "links_compare_excluded": "Исключено {n} ссылок по файлу {path}",

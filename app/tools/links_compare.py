@@ -227,10 +227,23 @@ def _split_md_row(line: str) -> list[str] | None:
     return cells
 
 
+_ID_COLUMN_HEADERS = {"id/username", "id", "username"}
+# A tg-channel-stats-style export sometimes names the channel and appends
+# its numeric ID in parens instead of a bare number, e.g.
+# "Фотограф Гудвин 18(1417817444)".
+_PAREN_ID_RE = re.compile(r"\((\d+)\)\s*$")
+
+
 def parse_md_known(path: str) -> tuple[set[str], set[int]]:
-    """Parse the tg-channel-stats table (`| Folder | Followers | ID/Username |`)
-    plus any bare t.me/ links anywhere in the file. Returns
-    (known_usernames lowercased without '@', known_numeric_ids)."""
+    """Parse an ID/username table — found by its *header* text
+    (`_ID_COLUMN_HEADERS`), not by column position, so it still works
+    whichever column it's in and regardless of how many other columns
+    (Tag, Rating, Views, …) come after it — plus, regardless of table shape
+    at all, any bare t.me/ link or @username mention anywhere in the file
+    (which is what makes a plain checklist or free-form notes work too).
+    A cell's value can be `@username`, a bare numeric ID, or
+    `Display Name(numeric ID)`. Returns (known_usernames lowercased without
+    '@', known_numeric_ids)."""
     try:
         content = Path(path).read_text(encoding="utf-8")
     except OSError:
@@ -239,23 +252,41 @@ def parse_md_known(path: str) -> tuple[set[str], set[int]]:
     usernames: set[str] = set()
     ids: set[int] = set()
 
+    id_col: int | None = None
     for raw_line in content.splitlines():
         cells = _split_md_row(raw_line)
-        if cells is None or len(cells) < 3:
+        if cells is None:
             continue
-        last = cells[-1]
-        if not last or set(last) <= {"-", ":"} or last.lower() in ("id/username", "id", "username"):
-            continue  # header / separator row
-        if last.startswith("@"):
-            usernames.add(last[1:].lower())
-        elif last.lstrip("-").isdigit():
-            ids.add(int(last))
+        if id_col is None:
+            for i, cell in enumerate(cells):
+                if cell.strip().lower() in _ID_COLUMN_HEADERS:
+                    id_col = i
+                    break
+            continue  # this row was either the header itself, or came before it
+        if id_col >= len(cells):
+            continue
+        value = cells[id_col].strip()
+        if not value or set(value) <= {"-", ":"}:
+            continue  # separator row
+        if value.startswith("@"):
+            usernames.add(value[1:].lower())
+        elif value.isdigit():
+            ids.add(int(value))
+        else:
+            m = _PAREN_ID_RE.search(value)
+            if m:
+                ids.add(int(m.group(1)))
+            # else: a plain display name with no extractable ID - skip it
 
-    # Also pick up t.me links anywhere, so a differently-formatted MD works too.
+    # Also pick up t.me links and bare @usernames anywhere in the file (any
+    # column, any row), so a differently-shaped MD — a 2-column checklist,
+    # a plain bullet list, free-form notes, whatever — works too.
     for m in LINK_RE.finditer(content):
         parsed = _parse_link(m.group(1))
         if parsed and parsed[1] == "user":
             usernames.add(parsed[0].split("t.me/", 1)[-1])
+    for m in MENTION_RE.finditer(content):
+        usernames.add(m.group(1).lower())
 
     return usernames, ids
 
@@ -296,6 +327,67 @@ def parse_saved_rows(path: str) -> list[dict]:
         rows.append({"link": norm, "tag": tag, "kind": kind,
                     "followers": followers, "id": None, "broken": broken})
     return rows
+
+
+_TAG_COLUMN_HEADERS = {"names", "name", "tag", "tags"}
+
+
+def _parse_known_table_rows(path: str) -> list[dict]:
+    """Loads a known-links-style table — the ID/username column found by
+    header, same shapes `parse_md_known` understands (tg-channel-stats,
+    however many extra columns it's grown; a plain `| id | names |`
+    checklist) — as *unresolved* working rows: link + tag only, since this
+    kind of file never carries a follower count. A numeric-ID-only entry
+    (no @username, bare or `Name(12345)`) is skipped — there's no t.me link
+    to build without a username."""
+    try:
+        content = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return []
+
+    rows: list[dict] = []
+    id_col: int | None = None
+    tag_col: int | None = None
+    for raw_line in content.splitlines():
+        cells = _split_md_row(raw_line)
+        if cells is None:
+            continue
+        if id_col is None:
+            for i, cell in enumerate(cells):
+                low = cell.strip().lower()
+                if low in _ID_COLUMN_HEADERS:
+                    id_col = i
+                elif low in _TAG_COLUMN_HEADERS and tag_col is None:
+                    tag_col = i
+            continue  # this row was either the header itself, or came before it
+        if id_col >= len(cells):
+            continue
+        value = cells[id_col].strip()
+        if not value or set(value) <= {"-", ":"}:
+            continue  # separator row
+        if not value.startswith("@"):
+            continue  # numeric-only entry - no username to build a link from
+        username = value[1:].lower()
+        if tag_col is not None and tag_col < len(cells):
+            tag = cells[tag_col].strip()
+        elif id_col != 0 and cells:
+            tag = cells[0].strip()  # e.g. the "Folder" category column
+        else:
+            tag = ""
+        rows.append({"link": f"t.me/{username}", "tag": tag, "kind": "user",
+                    "followers": None, "id": None, "broken": False})
+    return rows
+
+
+def parse_loadable_rows(path: str) -> list[dict]:
+    """"Load MD" reads any of several .md shapes: our own Save MD output
+    (`|Followers|t.me/ link|tag|`, resumed exactly — follower counts and
+    ❌ marks included) is tried first since it's unambiguous (a real
+    t.me/http link in the second column); anything else falls back to a
+    known-links-style table (`_parse_known_table_rows`), loaded as a fresh,
+    unresolved starting list to run Populate on."""
+    rows = parse_saved_rows(path)
+    return rows if rows else _parse_known_table_rows(path)
 
 
 def exclude_by_md(rows: list[dict], md_path: str) -> tuple[list[dict], int]:

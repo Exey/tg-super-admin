@@ -21,7 +21,7 @@ from ..tools.chat_activity import PERIODS, run_chat_activity
 from ..tools.cleaner import run_cleaner, scan_keep_candidates
 from ..tools.common import reset_progress
 from ..tools.links_compare import (
-    exclude_by_md, parse_saved_rows, populate_followers,
+    exclude_by_md, parse_loadable_rows, populate_followers,
     populate_private_channels, scan_channel_links,
 )
 from ..tools.post_image_replacer import run_post_image_replace
@@ -1494,7 +1494,7 @@ class LinksCompareTab(ToolTab):
             self, self.tr_("links_compare_load_md_button"), "", "Markdown (*.md)")
         if not path:
             return
-        rows = parse_saved_rows(path)
+        rows = parse_loadable_rows(path)
         if not rows:
             QMessageBox.warning(self, self.tr_("app_title"),
                                 self.tr_("links_compare_load_md_empty"))
