@@ -197,6 +197,16 @@ EN = {
     "users_extractor_col_username": "Username / ID",
     "users_extractor_copy_username": "📋 Copy username",
     "users_extractor_done": "Group A: {a} member(s). Group B: {b} member(s).",
+    "users_extractor_add_all": "Add All From A ({n})",
+    "users_extractor_add_link": "Add with link ({n})",
+    "users_extractor_add_confirm": "Add {n} user(s) from Group A directly to {group}? "
+                                   "(Users whose privacy settings forbid it will be listed "
+                                   "for sending a link instead.)",
+    "users_extractor_add_result": "added {added} · need link {link} · failed {failed}",
+    "users_extractor_add_done": "Added {added}; {link} need a link.",
+    "users_extractor_link_hint": "These users can't be added directly — send each a link "
+                                 "to the group (double-click opens the profile).",
+    "users_extractor_copy_all_links": "📋 Copy all links",
     "users_extractor_save_html": "💾 Save as HTML…",
     "users_extractor_saved": "Saved to {path}",
     "users_extractor_nothing_to_save": "Nothing to save yet — run the comparison first.",
@@ -476,6 +486,16 @@ RU = {
     "users_extractor_col_username": "Username / ID",
     "users_extractor_copy_username": "📋 Скопировать username",
     "users_extractor_done": "Группа A: участников {a}. Группа B: участников {b}.",
+    "users_extractor_add_all": "Добавить всех из A ({n})",
+    "users_extractor_add_link": "Добавить по ссылке ({n})",
+    "users_extractor_add_confirm": "Добавить {n} польз. из группы A напрямую в {group}? "
+                                   "(Те, у кого приватность запрещает, попадут в список "
+                                   "для отправки ссылки.)",
+    "users_extractor_add_result": "добавлено {added} · нужна ссылка {link} · ошибок {failed}",
+    "users_extractor_add_done": "Добавлено {added}; ссылку нужно отправить {link}.",
+    "users_extractor_link_hint": "Этих пользователей нельзя добавить напрямую — отправьте "
+                                 "каждому ссылку на группу (двойной клик открывает профиль).",
+    "users_extractor_copy_all_links": "📋 Скопировать все ссылки",
     "users_extractor_save_html": "💾 Сохранить в HTML…",
     "users_extractor_saved": "Сохранено в {path}",
     "users_extractor_nothing_to_save": "Пока нечего сохранять — сначала запустите сравнение.",

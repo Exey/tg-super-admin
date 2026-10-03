@@ -28,7 +28,7 @@ from ..tools.post_image_replacer import run_post_image_replace
 from ..tools.repost import run_repost
 from ..tools.repost_group import count_repost_group, run_repost_group
 from ..tools.restore import run_restore
-from ..tools.users_extractor import run_users_extractor
+from ..tools.users_extractor import add_users_to_group, run_users_extractor
 from ..worker import LocalTaskWorker
 from .base_tab import ToolTab
 
@@ -828,15 +828,35 @@ class UsersExtractorTab(ToolTab):
         return self.tr_("users_extractor_help")
 
     def build_form(self) -> None:
-        self.group_a_edit = QLineEdit(self.cfg.get("USERS_EXTRACTOR_GROUP_A"))
-        self.form.addRow(self.tr_("users_extractor_group_a"), self.group_a_edit)
-
-        self.group_b_edit = QLineEdit(self.cfg.get("USERS_EXTRACTOR_GROUP_B"))
-        self.form.addRow(self.tr_("users_extractor_group_b"), self.group_b_edit)
-
         self._members_a: list[dict] = []
         self._members_b: list[dict] = []
         self._delta_members: list[dict] = []
+        self._need_link: list[dict] = []  # refused a direct add (privacy)
+
+        self.group_a_edit = QLineEdit(self.cfg.get("USERS_EXTRACTOR_GROUP_A"))
+        a_row = QWidget()
+        a_lay = QHBoxLayout(a_row)
+        a_lay.setContentsMargins(0, 0, 0, 0)
+        a_lay.addWidget(self.group_a_edit, stretch=1)
+        self.add_result_label = QLabel("")  # who got added from A to B
+        self.add_result_label.setStyleSheet("color: palette(placeholder-text);")
+        a_lay.addWidget(self.add_result_label)
+        self.form.addRow(self.tr_("users_extractor_group_a"), a_row)
+
+        self.group_b_edit = QLineEdit(self.cfg.get("USERS_EXTRACTOR_GROUP_B"))
+        b_row = QWidget()
+        b_lay = QHBoxLayout(b_row)
+        b_lay.setContentsMargins(0, 0, 0, 0)
+        b_lay.addWidget(self.group_b_edit, stretch=1)
+        self.add_all_btn = QPushButton()
+        self.add_all_btn.clicked.connect(self._add_all_from_a)
+        b_lay.addWidget(self.add_all_btn)
+        self.add_link_btn = QPushButton()
+        self.add_link_btn.clicked.connect(self._show_link_list)
+        self.add_link_btn.setVisible(False)  # appears once an add run finished
+        b_lay.addWidget(self.add_link_btn)
+        self.form.addRow(self.tr_("users_extractor_group_b"), b_row)
+        self._update_add_buttons()
 
         results_box = QWidget()
         results_lay = QVBoxLayout(results_box)
@@ -975,6 +995,92 @@ class UsersExtractorTab(ToolTab):
         self._delta_members = sorted((by_id[i] for i in ids),
                                      key=lambda m: m["name"].lower())
         self._fill_table(self.table_delta, self._delta_members)
+        self._update_add_buttons()
+
+    # --------------------------------------------------------- add A -> B
+    def _a_only(self) -> list[dict]:
+        ids_b = {m["id"] for m in self._members_b}
+        # Bots can't be added to a group by a user account — skip them.
+        return [m for m in self._members_a
+                if m["id"] not in ids_b and not m.get("bot")]
+
+    def _update_add_buttons(self) -> None:
+        n = len(self._a_only())
+        self.add_all_btn.setText(self.tr_("users_extractor_add_all", n=n))
+        self.add_all_btn.setEnabled(n > 0 and not self.is_running())
+        self.add_link_btn.setText(
+            self.tr_("users_extractor_add_link", n=len(self._need_link)))
+        self.add_link_btn.setVisible(bool(self._need_link))
+
+    def set_extra_buttons_enabled(self, enabled: bool) -> None:
+        if enabled:
+            self._update_add_buttons()
+        else:
+            self.add_all_btn.setEnabled(False)
+
+    def _add_all_from_a(self) -> None:
+        if self.is_running() or not self.check_conn():
+            return
+        users = self._a_only()
+        if not users or not self.group_b_edit.text().strip():
+            return
+        answer = QMessageBox.question(
+            self, self.tr_("app_title"),
+            self.tr_("users_extractor_add_confirm", n=len(users),
+                     group=self.group_b_edit.text().strip()))
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._need_link = []
+        self.add_result_label.setText("")
+        self.launch(add_users_to_group,
+                    {"group_b": self.group_b_edit.text().strip(), "users": users},
+                    done_slot=self._on_add_done)
+
+    def _on_add_done(self, ok: bool, msg: str) -> None:
+        if ok:
+            try:
+                data = json.loads(msg)
+                added = data["added"]
+                self._need_link = data["need_link"]
+                have = {m["id"] for m in self._members_b}
+                self._members_b += [u for u in added if u["id"] not in have]
+                self._fill_table(self.table_b, self._members_b)
+                self._refresh_delta()
+                self.add_result_label.setText(self.tr_(
+                    "users_extractor_add_result", added=len(added),
+                    link=len(self._need_link), failed=len(data["failed"])))
+                msg = data["stopped_reason"] or self.tr_(
+                    "users_extractor_add_done", added=len(added),
+                    link=len(self._need_link))
+            except (ValueError, KeyError):
+                ok = False
+        ToolTab.on_done(self, ok, msg)  # base reset; our on_done expects diff JSON
+
+    def _show_link_list(self) -> None:
+        if not self._need_link:
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self.tr_("users_extractor_add_link", n=len(self._need_link)))
+        dlg.resize(460, 420)
+        lay = QVBoxLayout(dlg)
+        lay.addWidget(QLabel(self.tr_("users_extractor_link_hint")))
+        lst = QListWidget()
+        links = [build_user_link(m) for m in self._need_link]
+        for m, link in zip(self._need_link, links):
+            item = QListWidgetItem(f"{m['name']} — {link}")
+            item.setData(Qt.ItemDataRole.UserRole, link)
+            lst.addItem(item)
+        lst.itemDoubleClicked.connect(
+            lambda it: QDesktopServices.openUrl(QUrl(it.data(Qt.ItemDataRole.UserRole))))
+        lay.addWidget(lst)
+        row = QHBoxLayout()
+        copy_btn = QPushButton(self.tr_("users_extractor_copy_all_links"))
+        copy_btn.clicked.connect(
+            lambda: QApplication.clipboard().setText("\n".join(links)))
+        row.addWidget(copy_btn)
+        row.addStretch()
+        lay.addLayout(row)
+        dlg.exec()
 
     # -------------------------------------------------------------- export
     def _save_html(self) -> None:
@@ -1024,6 +1130,8 @@ class UsersExtractorTab(ToolTab):
                 data = json.loads(msg)
                 self._members_a = data["a"]["members"]
                 self._members_b = data["b"]["members"]
+                self._need_link = []
+                self.add_result_label.setText("")
                 self._fill_table(self.table_a, self._members_a)
                 self._fill_table(self.table_b, self._members_b)
                 self._refresh_delta()
