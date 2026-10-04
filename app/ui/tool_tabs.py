@@ -5,7 +5,7 @@ import json
 import os
 import re
 
-from PySide6.QtCore import Qt, QUrl
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QCheckBox, QComboBox, QDialog,
@@ -821,6 +821,35 @@ class CleanerTab(ToolTab):
 
 # ========================================================= Users extractor
 
+def parse_user_tokens(text: str) -> list[str]:
+    """Pulls usernames / numeric IDs out of a pasted list: one per line or
+    comma/space separated; `@name`, `t.me/name` and plain names all work, and
+    so do error-log lines like "! name: UserBlockedError: …" (only the part
+    before the first colon counts). Returns lowercase usernames (no @) and
+    numeric IDs as strings, de-duplicated, in order."""
+    out: list[str] = []
+    for line in text.splitlines():
+        line = line.strip()
+        m = re.match(r"^[\s!*\-•]*@?[A-Za-z0-9_]+\s*:(?!//)", line)
+        if m:
+            line = line.split(":", 1)[0]
+        for piece in re.split(r"[,\s]+", line):
+            mm = re.match(r"^[!*\-•]*(?:https?://)?(?:t\.me/)?@?([A-Za-z0-9_]{3,})/?$",
+                          piece.strip())
+            if mm and mm.group(1).lower() not in out:
+                out.append(mm.group(1).lower())
+    return out
+
+
+class _PasteEdit(QPlainTextEdit):
+    """Emits `pasted` right after text is pasted into it."""
+    pasted = Signal()
+
+    def insertFromMimeData(self, source) -> None:  # noqa: N802 (Qt naming)
+        super().insertFromMimeData(source)
+        self.pasted.emit()
+
+
 class UsersExtractorTab(ToolTab):
     tool_name = "users_extractor"
 
@@ -831,7 +860,8 @@ class UsersExtractorTab(ToolTab):
         self._members_a: list[dict] = []
         self._members_b: list[dict] = []
         self._delta_members: list[dict] = []
-        self._need_link: list[dict] = []  # refused a direct add (privacy)
+        self._need_link: list[dict] = []  # couldn't be added directly
+        self._excluded: set[str] = set()  # pasted: skip in direct add
 
         self.group_a_edit = QLineEdit(self.cfg.get("USERS_EXTRACTOR_GROUP_A"))
         a_row = QWidget()
@@ -853,7 +883,6 @@ class UsersExtractorTab(ToolTab):
         b_lay.addWidget(self.add_all_btn)
         self.add_link_btn = QPushButton()
         self.add_link_btn.clicked.connect(self._show_link_list)
-        self.add_link_btn.setVisible(False)  # appears once an add run finished
         b_lay.addWidget(self.add_link_btn)
         self.form.addRow(self.tr_("users_extractor_group_b"), b_row)
         self._update_add_buttons()
@@ -1002,7 +1031,15 @@ class UsersExtractorTab(ToolTab):
         ids_b = {m["id"] for m in self._members_b}
         # Bots can't be added to a group by a user account — skip them.
         return [m for m in self._members_a
-                if m["id"] not in ids_b and not m.get("bot")]
+                if m["id"] not in ids_b and not m.get("bot")
+                and not self._user_keys(m) & self._excluded]
+
+    @staticmethod
+    def _user_keys(m: dict) -> set[str]:
+        keys = {str(m["id"])} if m.get("id") is not None else set()
+        if m.get("username"):
+            keys.add(m["username"].lower())
+        return keys
 
     def _update_add_buttons(self) -> None:
         n = len(self._a_only())
@@ -1010,7 +1047,6 @@ class UsersExtractorTab(ToolTab):
         self.add_all_btn.setEnabled(n > 0 and not self.is_running())
         self.add_link_btn.setText(
             self.tr_("users_extractor_add_link", n=len(self._need_link)))
-        self.add_link_btn.setVisible(bool(self._need_link))
 
     def set_extra_buttons_enabled(self, enabled: bool) -> None:
         if enabled:
@@ -1030,7 +1066,6 @@ class UsersExtractorTab(ToolTab):
                      group=self.group_b_edit.text().strip()))
         if answer != QMessageBox.StandardButton.Yes:
             return
-        self._need_link = []
         self.add_result_label.setText("")
         self.launch(add_users_to_group,
                     {"group_b": self.group_b_edit.text().strip(), "users": users},
@@ -1041,7 +1076,16 @@ class UsersExtractorTab(ToolTab):
             try:
                 data = json.loads(msg)
                 added = data["added"]
-                self._need_link = data["need_link"]
+                # Refused (privacy) and errored (blocked, too many channels,
+                # bad ID…) users alike can only be reached with a link.
+                have: set[str] = set()
+                for m in self._need_link:
+                    have |= self._user_keys(m)
+                for m in data["need_link"] + data["failed"]:
+                    if not self._user_keys(m) & have:
+                        self._need_link.append(m)
+                        have |= self._user_keys(m)
+                    self._excluded |= self._user_keys(m)  # don't retry directly
                 have = {m["id"] for m in self._members_b}
                 self._members_b += [u for u in added if u["id"] not in have]
                 self._fill_table(self.table_b, self._members_b)
@@ -1057,30 +1101,95 @@ class UsersExtractorTab(ToolTab):
         ToolTab.on_done(self, ok, msg)  # base reset; our on_done expects diff JSON
 
     def _show_link_list(self) -> None:
-        if not self._need_link:
-            return
         dlg = QDialog(self)
-        dlg.setWindowTitle(self.tr_("users_extractor_add_link", n=len(self._need_link)))
-        dlg.resize(460, 420)
+        dlg.resize(500, 560)
         lay = QVBoxLayout(dlg)
         lay.addWidget(QLabel(self.tr_("users_extractor_link_hint")))
+
         lst = QListWidget()
-        links = [build_user_link(m) for m in self._need_link]
-        for m, link in zip(self._need_link, links):
-            item = QListWidgetItem(f"{m['name']} — {link}")
-            item.setData(Qt.ItemDataRole.UserRole, link)
-            lst.addItem(item)
+        lay.addWidget(lst, stretch=1)
         lst.itemDoubleClicked.connect(
             lambda it: QDesktopServices.openUrl(QUrl(it.data(Qt.ItemDataRole.UserRole))))
-        lay.addWidget(lst)
+        status = QLabel("")
+        status.setStyleSheet("color: palette(placeholder-text);")
+
+        def refill() -> None:
+            lst.clear()
+            for m in self._need_link:
+                link = build_user_link(m)
+                item = QListWidgetItem(f"{m['name']} — {link}")
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked)
+                item.setData(Qt.ItemDataRole.UserRole, link)
+                lst.addItem(item)
+            dlg.setWindowTitle(self.tr_("users_extractor_add_link",
+                                        n=len(self._need_link)))
+
+        def set_all(state) -> None:
+            for i in range(lst.count()):
+                lst.item(i).setCheckState(state)
+
+        def checked_links() -> list[str]:
+            return [lst.item(i).data(Qt.ItemDataRole.UserRole)
+                    for i in range(lst.count())
+                    if lst.item(i).checkState() == Qt.CheckState.Checked]
+
         row = QHBoxLayout()
-        copy_btn = QPushButton(self.tr_("users_extractor_copy_all_links"))
+        all_btn = QPushButton(self.tr_("keep_select_all"))
+        all_btn.clicked.connect(lambda: set_all(Qt.CheckState.Checked))
+        none_btn = QPushButton(self.tr_("keep_select_none"))
+        none_btn.clicked.connect(lambda: set_all(Qt.CheckState.Unchecked))
+        copy_btn = QPushButton(self.tr_("users_extractor_copy_checked_links"))
         copy_btn.clicked.connect(
-            lambda: QApplication.clipboard().setText("\n".join(links)))
-        row.addWidget(copy_btn)
+            lambda: QApplication.clipboard().setText("\n".join(checked_links())))
+        for b in (all_btn, none_btn, copy_btn):
+            row.addWidget(b)
         row.addStretch()
         lay.addLayout(row)
+
+        lay.addWidget(QLabel(self.tr_("users_extractor_paste_label")))
+        paste = _PasteEdit()
+        paste.setPlaceholderText(self.tr_("users_extractor_paste_placeholder"))
+        paste.setMaximumHeight(110)
+        lay.addWidget(paste)
+        lay.addWidget(status)
+
+        def on_pasted() -> None:
+            n = self._load_pasted_list(paste.toPlainText())
+            paste.clear()
+            status.setText(self.tr_("users_extractor_paste_loaded", n=n))
+            refill()
+
+        paste.pasted.connect(on_pasted)
+        refill()
         dlg.exec()
+
+    def _load_pasted_list(self, text: str) -> int:
+        """A pasted list = people who must not be tried by a direct add and
+        need a link instead. Matches them to Group A members where possible
+        (name/ID); a username not in A still gets a t.me link of its own."""
+        tokens = parse_user_tokens(text)
+        have: set[str] = set()
+        for m in self._need_link:
+            have |= self._user_keys(m)
+        by_key: dict[str, dict] = {}
+        for m in self._members_a:
+            for k in self._user_keys(m):
+                by_key[k] = m
+        for tok in tokens:
+            self._excluded.add(tok)
+            m = by_key.get(tok)
+            if m is not None:
+                self._excluded |= self._user_keys(m)
+            elif tok.isdigit():
+                continue  # unknown bare ID: no link can be built from it
+            else:
+                m = {"id": None, "username": tok, "name": f"@{tok}"}
+            if m is not None and not self._user_keys(m) & have:
+                self._need_link.append(m)
+                have |= self._user_keys(m)
+        self._update_add_buttons()
+        return len(tokens)
 
     # -------------------------------------------------------------- export
     def _save_html(self) -> None:
@@ -1130,7 +1239,11 @@ class UsersExtractorTab(ToolTab):
                 data = json.loads(msg)
                 self._members_a = data["a"]["members"]
                 self._members_b = data["b"]["members"]
-                self._need_link = []
+                b_keys: set[str] = set()
+                for m in self._members_b:
+                    b_keys |= self._user_keys(m)
+                self._need_link = [m for m in self._need_link
+                                   if not self._user_keys(m) & b_keys]
                 self.add_result_label.setText("")
                 self._fill_table(self.table_a, self._members_a)
                 self._fill_table(self.table_b, self._members_b)

@@ -207,6 +207,10 @@ EN = {
     "users_extractor_link_hint": "These users can't be added directly — send each a link "
                                  "to the group (double-click opens the profile).",
     "users_extractor_copy_all_links": "📋 Copy all links",
+    "users_extractor_copy_checked_links": "📋 Copy checked links",
+    "users_extractor_paste_label": "Paste a list (@names, links or log lines) — they're added here and skipped by Add All:",
+    "users_extractor_paste_placeholder": "@user1\nt.me/user2\n! user3: UserBlockedError: …",
+    "users_extractor_paste_loaded": "Loaded {n} name(s) from the pasted list.",
     "users_extractor_save_html": "💾 Save as HTML…",
     "users_extractor_saved": "Saved to {path}",
     "users_extractor_nothing_to_save": "Nothing to save yet — run the comparison first.",
@@ -496,6 +500,10 @@ RU = {
     "users_extractor_link_hint": "Этих пользователей нельзя добавить напрямую — отправьте "
                                  "каждому ссылку на группу (двойной клик открывает профиль).",
     "users_extractor_copy_all_links": "📋 Скопировать все ссылки",
+    "users_extractor_copy_checked_links": "📋 Скопировать отмеченные ссылки",
+    "users_extractor_paste_label": "Вставьте список (@имена, ссылки или строки лога) — они попадут сюда и будут пропущены при «Добавить всех»:",
+    "users_extractor_paste_placeholder": "@user1\nt.me/user2\n! user3: UserBlockedError: …",
+    "users_extractor_paste_loaded": "Загружено имён из списка: {n}.",
     "users_extractor_save_html": "💾 Сохранить в HTML…",
     "users_extractor_saved": "Сохранено в {path}",
     "users_extractor_nothing_to_save": "Пока нечего сохранять — сначала запустите сравнение.",
